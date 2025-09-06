@@ -4,7 +4,7 @@
   "main": "bin/index.js",
   "type": "module",
   "bin": {
-    "uvx-proxy-local": "./bin/index.js"
+    "uvx-proxy-local": "bin/index.js"
   },
   "scripts": {
     "test": "node test/run-tests.js",
