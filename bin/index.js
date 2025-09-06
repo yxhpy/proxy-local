@@ -20,7 +20,7 @@ manager.register(new LocalTunnelProvider()); // 备选：经典方案
 program
   .name('uvx-proxy-local')
   .description('多提供商内网穿透 CLI 工具')
-  .version('3.2.0')
+  .version('3.2.1')
   .argument('[port]', 'Local port to proxy')
   .option('-p, --provider <name>', 'Specify a tunnel provider (pinggy, localtunnel, serveo, cloudflare)')
   .option('--list-providers', 'List all available providers with features')
@@ -28,6 +28,7 @@ program
   .option('--cloudflare-login', 'Login to Cloudflare account for persistent tunnels')
   .option('--cloudflare-logout', 'Logout from Cloudflare account')
   .option('--cloudflare-custom <name>', 'Use custom Cloudflare tunnel name')
+  .option('--reset-domain', 'Reset fixed domain configuration and show domain selection menu')
   .option('--timeout <ms>', 'Connection timeout in milliseconds')
   .option('--retries <n>', 'Number of retry attempts')
   .option('--verbose', 'Enable verbose output')
@@ -126,6 +127,24 @@ program
         process.exit(1);
       }
       return;
+    }
+
+    // 处理域名重置命令
+    if (options.resetDomain) {
+      try {
+        const cloudflareProvider = manager.getProvider('cloudflare');
+        if (!cloudflareProvider) {
+          console.error('❌ Cloudflare 提供商未注册');
+          process.exit(1);
+        }
+        
+        cloudflareProvider.resetDomainConfiguration();
+        console.log('💡 下次使用 Cloudflare 时将重新显示域名选择菜单');
+        return;
+      } catch (error) {
+        console.error(`❌ 重置域名配置失败: ${error.message}`);
+        process.exit(1);
+      }
     }
 
     // 如果用户只是想列出提供商
@@ -228,7 +247,8 @@ program
       // 使用智能回退创建隧道 (应用配置的超时和重试设置)
       const result = await manager.createTunnelWithFallback(portNumber, selectedProvider, {
         timeout: config.timeout,
-        retries: config.retries
+        retries: config.retries,
+        resetDomain: options.resetDomain
       });
       
       // 显示成功信息 - 使用新的格式化器

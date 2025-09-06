@@ -1,6 +1,6 @@
 {
   "name": "uvx-proxy-local",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "main": "bin/index.js",
   "type": "module",
   "bin": {
@@ -33,6 +33,7 @@
     "chalk": "^5.6.0",
     "commander": "^14.0.0",
     "cosmiconfig": "^9.0.0",
+    "inquirer": "^12.9.4",
     "localtunnel": "^2.0.2"
   }
 }

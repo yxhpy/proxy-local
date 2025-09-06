@@ -281,7 +281,7 @@
         "details": "在调用 `createTunnel` 的地方使用 `try...catch` 块。在 `catch` 块中，检查错误的类型或消息，并向用户提供有意义的反馈。例如，如果端口无效，提示“端口必须是数字”。如果 `localtunnel` 连接失败，提示“无法连接到穿透服务，请检查网络连接”。可以使用 `chalk.red` 来显示错误消息。",
         "testStrategy": "模拟各种错误场景进行测试：1. 提供一个非数字端口 `uvx proxy-local test`。2. 提供一个未被监听的端口。3. 在断网环境下运行命令。验证每种情况下程序是否都能捕获错误并显示正确的错误信息，而不是崩溃。",
         "priority": "medium",
-        "dependencies": [
+        "dependencies": [ 
           4
         ],
         "status": "done",
@@ -734,11 +734,89 @@
         ],
         "status": "done",
         "subtasks": []
+      },
+      {
+        "id": 41,
+        "title": "实现 Cloudflare 域名选择和管理功能",
+        "description": "引入一个交互式界面，用于自动安装 `cloudflared`、选择和管理 Cloudflare 域名，支持随机域名、自定义 A 记录域名，并提供域名固定功能以提升用户体验。",
+        "status": "done",
+        "dependencies": [
+          23,
+          24
+        ],
+        "priority": "medium",
+        "details": "此任务旨在通过一个统一的交互式流程简化 Cloudflare 隧道域名的配置。1. **`cloudflared` 自动检测与安装**：在执行命令时，首先检查系统中 `cloudflared` 是否存在且在 PATH 中。如果未找到，则根据用户的操作系统（macOS/Linux/Windows）提示用户并自动执行安装命令（例如，在 macOS 上使用 `brew install cloudflared`）。2. **交互式域名选择界面**：使用 `inquirer.js` 或类似库构建一个命令行菜单。当用户未指定域名时，此菜单将自动触发，提供以下选项：a) 使用随机域名（`*.trycloudflare.com` 的临时隧道）；b) 从已登录的 Cloudflare 账户中选择一个已配置的 A 记录域名（需要认证）；c) 手动输入一个自定义域名（需指向 Cloudflare DNS）。3. **Cloudflare 账户集成**：当用户选择从账户中选择域名时，系统将检查当前的认证状态（复用任务24的功能）。如果用户未登录，将引导用户完成 `cloudflared tunnel login` 流程。登录后，通过 Cloudflare API 获取用户账户下的可用域名列表，并筛选出包含 A 记录的域名进行展示。4. **域名固定功能**：用户通过交互界面选择一个域名后，系统将询问是否将其“固定”为默认域名。如果用户同意，该域名将被保存在本地配置文件中（例如 `~/.uvx/config.json`）。后续执行命令时，将自动使用此固定域名，除非用户使用特定标志（如 `--reset-domain`）来清除设置并重新选择。",
+        "testStrategy": "1. **`cloudflared` 安装验证**：在一个未安装 `cloudflared` 的环境中运行命令，确认系统能正确检测缺失、提示用户并成功完成安装。在已安装的环境中，确认安装步骤被跳过。2. **交互流程验证**：运行命令，确认域名选择菜单正常显示。选择“随机域名”，验证是否成功创建了 `*.trycloudflare.com` 隧道。3. **认证与域名列表验证**：在未登录状态下选择“从账户选择域名”，验证是否自动触发了登录流程。登录后，验证菜单中是否只正确列出了测试账户下配置了 A 记录的域名，并确认仅有 CNAME 或 AAAA 记录的域名被过滤掉。选择其中一个域名，验证隧道是否使用该域名成功建立。4. **域名固定功能验证**：选择一个域名并选择“固定”它。检查本地配置文件，确认域名已被正确保存。退出并重新运行命令，验证程序是否直接使用了该固定域名而没有显示选择菜单。最后，使用 `--reset-domain` 标志运行命令，确认配置被清除且选择菜单再次出现。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "",
+            "description": "实现 `cloudflared` 的自动检测与安装脚本",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "",
+            "description": "使用 `inquirer.js` 构建交互式域名选择菜单，提供随机、从账户选择、手动输入三个选项",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "",
+            "description": "集成 Cloudflare 登录认证流程（复用任务24的功能）",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "",
+            "description": "实现通过 Cloudflare API 获取域名列表，并实现只筛选 A 记录域名的逻辑",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "",
+            "description": "实现域名固定功能，将用户选择的域名保存到本地配置文件",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "",
+            "description": "添加 `--reset-domain` 命令行标志，用于清除已固定的域名配置",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "",
+            "description": "编写并更新单元测试和集成测试，重点验证 A 记录筛选、域名固定和重置功能",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-09-05T13:44:42.534Z",
-      "updated": "2025-09-06T11:07:28.672Z",
+      "updated": "2025-09-06T17:15:49.490Z",
       "description": "Tasks for master context"
     }
   }

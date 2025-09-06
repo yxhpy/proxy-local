@@ -68,7 +68,7 @@ async function testInterfaceCompliance() {
   assert.equal(createTunnelLength, 1, 'createTunnel should accept 1 parameter (port)');
   
   const isAvailableLength = provider.isAvailable.length;
-  assert.equal(isAvailableLength, 0, 'isAvailable should accept 0 parameters');
+  assert.equal(isAvailableLength, 0, 'isAvailable should accept 0 parameters (optional options object)');
   
   console.log('    ✓ Interface compliance works correctly');
 }
@@ -83,7 +83,7 @@ async function testFeaturesInformation() {
   assert.equal(features.requiresConfirmation, false, 'Should not require confirmation');
   assert.equal(features.speed, 'fast', 'Should have fast speed');
   assert.equal(features.httpsSupport, true, 'Should support HTTPS');
-  assert.equal(features.customDomain, false, 'Should not support custom domain in temp mode');
+  assert.equal(features.customDomain, true, 'Should support custom domain with domain selection');
   assert.ok(features.description.includes('Cloudflare'), 'Description should mention Cloudflare');
   
   // Test extended features
@@ -220,7 +220,8 @@ async function testPersistentMode() {
   // Note: We can't actually create tunnels without cloudflared, but we can test the logic
   try {
     // This will fail due to cloudflared not being available, but we can test the error messages
-    await provider.createTunnel(8080, { useAuth: true, customName: 'test' });
+    // Skip auto-install in tests to avoid timeouts
+    await provider.createTunnel(8080, { useAuth: true, customName: 'test', autoInstall: false, skipDomainSelection: true });
   } catch (error) {
     assert.ok(error.message.includes('cloudflared') || error.message.includes('登录'), 'Should provide appropriate error message');
   }
@@ -238,7 +239,7 @@ async function testErrorHandling() {
   
   // Test createTunnel with invalid port (should fail appropriately)
   try {
-    await provider.createTunnel('invalid-port');
+    await provider.createTunnel('invalid-port', { autoInstall: false, skipDomainSelection: true });
     assert.fail('Should throw error for invalid port');
   } catch (error) {
     // This might fail for various reasons (cloudflared not available, invalid port, etc.)
@@ -249,7 +250,7 @@ async function testErrorHandling() {
   
   // Test createTunnel with port out of range
   try {
-    await provider.createTunnel(99999);
+    await provider.createTunnel(99999, { autoInstall: false, skipDomainSelection: true });
     assert.fail('Should throw error for port out of range');
   } catch (error) {
     assert.ok(error instanceof Error, 'Should throw Error instance for invalid port');
