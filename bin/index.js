@@ -20,7 +20,7 @@ manager.register(new LocalTunnelProvider()); // 备选：经典方案
 program
   .name('uvx-proxy-local')
   .description('多提供商内网穿透 CLI 工具')
-  .version('3.1.0')
+  .version('3.2.0')
   .argument('[port]', 'Local port to proxy')
   .option('-p, --provider <name>', 'Specify a tunnel provider (pinggy, localtunnel, serveo, cloudflare)')
   .option('--list-providers', 'List all available providers with features')

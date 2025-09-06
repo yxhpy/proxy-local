@@ -1,10 +1,10 @@
 {
   "name": "uvx-proxy-local",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "main": "bin/index.js",
   "type": "module",
   "bin": {
-    "uvx-proxy-local": "./bin/index.js"
+    "uvx-proxy-local": "bin/index.js"
   },
   "scripts": {
     "test": "node test/run-tests.js",
