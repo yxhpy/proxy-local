@@ -614,7 +614,7 @@
         "testStrategy": "验证 'release/v3.2.0' 分支已成功在远程仓库中创建，并且其初始代码与源分支完全一致。",
         "priority": "high",
         "dependencies": [],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -627,7 +627,7 @@
         "dependencies": [
           31
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -640,7 +640,7 @@
         "dependencies": [
           32
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -653,7 +653,7 @@
         "dependencies": [
           33
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -667,7 +667,7 @@
           33,
           34
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -680,7 +680,7 @@
         "dependencies": [
           35
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -693,7 +693,7 @@
         "dependencies": [
           36
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -706,7 +706,7 @@
         "dependencies": [
           37
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -719,7 +719,7 @@
         "dependencies": [
           38
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -732,13 +732,13 @@
         "dependencies": [
           38
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-09-05T13:44:42.534Z",
-      "updated": "2025-09-06T10:30:15.147Z",
+      "updated": "2025-09-06T11:07:28.672Z",
       "description": "Tasks for master context"
     }
   }
