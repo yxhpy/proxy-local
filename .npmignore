@@ -1,0 +1,18 @@
+# 排除 Claude Code 相关文件
+.claude/
+.taskmaster/
+.trae/
+.gemini/
+
+# 排除配置文件
+.env*
+.mcp.json
+CLAUDE.md
+GEMINI.md
+
+# 排除测试文件
+test-*.js
+
+# 排除开发文件
+*.log
+node_modules/

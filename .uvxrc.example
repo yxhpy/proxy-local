@@ -1,0 +1,31 @@
+# UVX Proxy Local Configuration File Example
+# Copy this to .uvxrc in your project directory or home directory
+
+# Default provider to use (cloudflare, pinggy, serveo, localtunnel)
+defaultProvider: "cloudflare"
+
+# Connection timeout in milliseconds
+timeout: 30000
+
+# Number of retry attempts
+retries: 3
+
+# Cloudflare specific settings
+cloudflare:
+  # Use temporary mode (true) or persistent mode (false)
+  # Persistent mode requires login: uvx-proxy-local --cloudflare-login
+  tempMode: true
+  
+  # Custom domain prefix for persistent tunnels
+  # customDomain: "myapp"
+
+# User interface settings
+ui:
+  # Enable verbose output
+  verbose: false
+  
+  # Enable colored output
+  colors: true
+  
+  # Enable emoji icons
+  icons: true

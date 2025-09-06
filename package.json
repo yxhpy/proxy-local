@@ -1,0 +1,38 @@
+{
+  "name": "uvx-proxy-local",
+  "version": "3.1.0",
+  "main": "bin/index.js",
+  "type": "module",
+  "bin": {
+    "uvx-proxy-local": "./bin/index.js"
+  },
+  "scripts": {
+    "test": "node test/run-tests.js",
+    "test:provider-manager": "node test/provider-manager.test.js",
+    "test:interface": "node test/interface-validation.test.js",
+    "test:cli": "node test/cli-parser.test.js",
+    "test:cloudflare": "node test/cloudflare-provider.test.js",
+    "test:fallback": "node test/fallback-mechanism.test.js",
+    "test:formatter": "node test/output-formatter.test.js",
+    "test:config": "node test/config-loader.test.js",
+    "start": "node bin/index.js"
+  },
+  "keywords": [
+    "tunnel",
+    "proxy",
+    "localtunnel",
+    "cli",
+    "ngrok",
+    "内网穿透"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "description": "多提供商内网穿透 CLI 工具，支持 Pinggy、Serveo、LocalTunnel 等免费服务，智能回退机制",
+  "dependencies": {
+    "@pinggy/pinggy": "^0.1.4",
+    "chalk": "^5.6.0",
+    "commander": "^14.0.0",
+    "cosmiconfig": "^9.0.0",
+    "localtunnel": "^2.0.2"
+  }
+}

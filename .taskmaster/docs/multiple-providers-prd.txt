@@ -1,0 +1,188 @@
+# 内网穿透工具多方案支持 PRD
+
+## 背景
+当前工具使用 localtunnel，虽然免费且快速，但存在一个用户体验问题：首次访问需要点击确认页面，用户反馈这个步骤太麻烦。需要增加更多免费的内网穿透方案选择。
+
+## 产品需求
+
+### 1. 多提供商支持
+- 支持多种免费内网穿透服务提供商
+- 用户可以选择不同的服务商
+- 默认使用最佳体验的服务商（无确认页面）
+
+### 2. 新增提供商
+- **Cloudflare Tunnel** (默认推荐): 企业级稳定性，支持两种模式
+  - 临时模式：无需登录，随机域名 `*.trycloudflare.com`
+  - 持久模式：需要登录，固定域名，支持自定义域名
+- **Pinggy**: 无确认页面，有官方 npm SDK (@pinggy/pinggy)
+- **Serveo**: SSH 隧道，无确认页面
+- **保留 LocalTunnel**: 作为备选方案
+- **未来扩展**: 支持更多提供商如 Bore、Staqlab
+
+### 3. CLI 命令优化
+```bash
+# 使用默认提供商（推荐 Cloudflare）
+uvx proxy-local 8000
+
+# 指定提供商
+uvx proxy-local 8000 --provider=cloudflare          # 默认临时模式
+uvx proxy-local 8000 --provider=cloudflare-temp     # 明确指定临时模式
+uvx proxy-local 8000 --provider=cloudflare-auth     # 持久模式（需要登录）
+uvx proxy-local 8000 --provider=pinggy
+uvx proxy-local 8000 --provider=localtunnel
+uvx proxy-local 8000 --provider=serveo
+
+# Cloudflare 特殊命令
+uvx proxy-local 8000 --cloudflare-login             # 登录 Cloudflare
+uvx proxy-local 8000 --cloudflare-logout            # 退出 Cloudflare
+uvx proxy-local 8000 --cloudflare-custom=mydomain.com  # 使用自定义域名
+
+# 列出可用提供商
+uvx proxy-local --list-providers
+```
+
+### 4. 用户体验改进
+- **Cloudflare 优先**: 默认使用 Cloudflare 临时模式，无确认页面
+- **智能模式选择**: 自动检测 Cloudflare 登录状态，推荐最合适的模式
+- **智能回退**: 如果首选服务不可用，自动尝试其他服务
+- **清晰的模式说明**: 显示当前使用的提供商和模式信息
+- **登录状态提示**: 提醒用户 Cloudflare 登录状态和可用功能
+
+### 5. 配置管理
+- 支持配置文件设置默认提供商
+- 支持环境变量配置
+- 记住用户偏好设置
+
+### 6. 错误处理和重试
+- 如果某个服务商失败，自动尝试下一个
+- 显示友好的错误信息和建议
+- 提供故障排除指导
+
+### 7. 输出优化
+
+#### Cloudflare 临时模式输出:
+```
+正在使用 Cloudflare Tunnel (临时模式) 为端口 8000 创建隧道...
+✅ 隧道创建成功！ (提供商: Cloudflare - 临时模式)
+🌐 公共 URL: https://random-words-1234.trycloudflare.com
+⚡ 特点: 无确认页面，企业级稳定性
+📊 速度: 极快 | 🔒 HTTPS: 支持 | 🔄 域名: 随机
+
+💡 提示: 使用 --provider=cloudflare-auth 获得固定域名
+
+按 Ctrl+C 关闭隧道
+```
+
+#### Cloudflare 持久模式输出:
+```
+正在使用 Cloudflare Tunnel (持久模式) 为端口 8000 创建隧道...
+✅ 隧道创建成功！ (提供商: Cloudflare - 持久模式)
+🌐 公共 URL: https://my-app-tunnel.mydomain.com
+⚡ 特点: 固定域名，访问控制，企业级功能
+📊 速度: 极快 | 🔒 HTTPS: 支持 | 🔄 域名: 固定
+
+🎯 已登录用户: user@example.com
+🔧 管理面板: https://dash.cloudflare.com
+
+按 Ctrl+C 关闭隧道
+```
+
+#### 其他提供商输出:
+```
+正在使用 Pinggy 为端口 8000 创建隧道...
+✅ 隧道创建成功！ (提供商: Pinggy)
+🌐 公共 URL: https://abc-123.pinggy.online
+⚡ 特点: 无确认页面，直接访问
+📊 速度: 快速 | 🔒 HTTPS: 支持
+
+按 Ctrl+C 关闭隧道
+```
+
+## 技术实现
+
+### 1. 架构设计
+- 创建提供商抽象接口
+- 实现各个提供商的适配器
+- 提供商管理器负责选择和切换
+- 配置管理模块
+
+### 2. 提供商接口
+```typescript
+interface TunnelProvider {
+  name: string;
+  createTunnel(port: number, options?: TunnelOptions): Promise<TunnelResult>;
+  isAvailable(): Promise<boolean>;
+  getFeatures(): ProviderFeatures;
+  // Cloudflare 特有方法
+  login?(): Promise<boolean>;
+  logout?(): Promise<void>;
+  isAuthenticated?(): Promise<boolean>;
+  getAuthStatus?(): Promise<AuthStatus>;
+}
+
+interface TunnelOptions {
+  mode?: 'temp' | 'persistent';
+  customDomain?: string;
+  authRequired?: boolean;
+}
+
+interface CloudflareTunnelProvider extends TunnelProvider {
+  createTempTunnel(port: number): Promise<TunnelResult>;
+  createPersistentTunnel(port: number, domain?: string): Promise<TunnelResult>;
+  manageTunnels(): Promise<TunnelInfo[]>;
+}
+```
+
+### 3. 配置文件支持
+- 支持 .uvxrc 配置文件
+- 支持环境变量 UVX_PROVIDER, CLOUDFLARE_API_TOKEN
+- 提供商偏好设置
+- Cloudflare 登录状态缓存
+
+## 验收标准
+
+### 基本功能
+- ✅ 支持至少 4 种不同的内网穿透提供商 (Cloudflare + 3 others)
+- ✅ 默认使用 Cloudflare 临时模式 (无确认页面)
+- ✅ Cloudflare 双模式支持：临时模式和持久模式
+- ✅ 命令行参数可以指定提供商和模式
+- ✅ 智能回退机制
+- ✅ Cloudflare 登录管理功能
+
+### 用户体验
+- ✅ Cloudflare 临时模式优先级最高 (无确认页面)
+- ✅ 智能检测登录状态并推荐合适模式
+- ✅ 清晰显示当前使用的提供商和模式
+- ✅ 友好的错误提示和建议
+- ✅ 帮助用户选择最适合的提供商
+- ✅ Cloudflare 登录状态和功能提示
+
+### 稳定性
+- ✅ 单个提供商失败不影响整体功能
+- ✅ 提供商不可用时自动切换
+- ✅ 所有提供商都有完善的错误处理
+
+## 优先级
+- P0: Cloudflare 集成 - 临时模式（无确认页面，默认推荐）
+- P0: Cloudflare 集成 - 持久模式（登录管理，固定域名）
+- P1: 提供商选择机制和模式切换
+- P1: 智能回退功能  
+- P1: Cloudflare 登录状态检测和管理
+- P2: 配置文件支持（包含 Cloudflare 设置）
+- P2: Pinggy 集成
+- P2: Serveo 集成
+- P3: 更多提供商扩展
+
+## Cloudflare 特有功能
+### 临时模式特点
+- 无需登录，即开即用
+- 随机 .trycloudflare.com 域名
+- 企业级稳定性和速度
+- 无流量限制
+
+### 持久模式特点  
+- 固定域名，支持自定义
+- 访问控制和安全设置
+- 管理面板集成
+- 团队协作功能
+- DNS 管理集成
