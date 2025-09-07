@@ -1,9 +1,13 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [3.3.0](https://github.com/yxhpy/proxy-local/compare/v3.2.1...v3.3.0) (2025-09-07)
+
+
+### Features
+
+* add version management and release scripts ([84ea3b6](https://github.com/yxhpy/proxy-local/commit/84ea3b6b1fc36ae5ba38fcad26aee11ee8112921))
 
 ## [3.2.0] - 2025-09-06
 
