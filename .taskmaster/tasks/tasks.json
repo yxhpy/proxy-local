@@ -1079,7 +1079,7 @@
         "description": "建立一个标准化、自动化的流程，用于更新版本号、生成变更日志、构建、测试并将新版本的软件包发布到 npm。",
         "details": "此任务旨在规范化并简化版本发布过程，减少手动操作和潜在错误。我们将采用业界最佳实践，如语义化版本（SemVer）和约定式提交（Conventional Commits）。\n1. **引入版本管理工具**：集成 `standard-version` 工具（或类似工具如 `release-it`）。该工具可以根据约定式提交消息自动确定版本号（补丁、次版本或主版本）、生成 `CHANGELOG.md` 文件，并创建和推送 Git 标签。\n2. **配置 npm 脚本**：在 `package.json` 中创建一个名为 `release` 的新脚本。此脚本将串联整个发布流程，确保每一步都按顺序执行。\n   ```json\n   \"scripts\": {\n     \"release\": \"npm test && standard-version && git push --follow-tags origin main && npm publish\"\n   }\n   ```\n3. **流程分解**：\n   - `npm test`：在发布前运行所有测试套件，确保代码质量和功能稳定性。\n   - `standard-version`：核心步骤。它会读取 git 提交历史，自动提升 `package.json` 中的版本号，基于提交记录更新 `CHANGELOG.md`，然后提交这些更改并创建一个新的版本标签（例如 `v1.2.3`）。\n   - `git push --follow-tags origin main`：将新的提交和版本标签推送到远程 Git 仓库。\n   - `npm publish`：将软件包构建并发布到 npm 公共注册中心。此步骤要求执行者已通过 `npm login` 登录或在 CI/CD 环境中配置了 `NPM_TOKEN`。\n4. **CI/CD 集成（可选）**：为了实现完全自动化，可以配置一个持续集成/持续部署（CI/CD）管道（例如使用 GitHub Actions）。当代码合并到主分支或手动触发工作流时，该管道将自动执行 `npm run release` 脚本。",
         "testStrategy": "由于此任务是关于流程的建立，测试策略侧重于验证该流程的每个环节是否都能正确、可靠地工作。\n1. **Dry Run 验证**：在不实际修改文件或发布的情况下，执行 `standard-version --dry-run` 命令。检查其输出，验证工具是否能正确解析提交历史，并预测出正确的版本号和变更日志条目。\n2. **本地模拟发布**：在本地特性分支上，完整运行 `npm run release` 脚本，但将最后一步替换为 `npm publish --dry-run`。验证以下几点：\n   - `package.json` 中的版本号是否已正确更新。\n   - `CHANGELOG.md` 文件是否已生成并包含了最新的提交信息。\n   - 是否已在本地成功创建了对应的 Git 标签。\n3. **预发布（Beta）测试**：执行一个到 npm `beta` 频道的预发布。使用命令 `standard-version --prerelease beta` 创建一个预发布版本（如 `v1.2.3-beta.0`），然后使用 `npm publish --tag beta` 将其发布。在一个新的测试项目中安装此 beta 版本，验证其功能是否符合预期。\n4. **首次生产发布监控**：在执行第一次正式发布时，密切监控每个步骤的控制台输出。发布成功后，立即访问 npmjs.com 上的包页面，确认新版本已上线。最后，通过 `npm install <package-name>@latest` 在一个干净的环境中安装最新版本，进行最终的功能验证。",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           56,
           55,
@@ -1089,11 +1089,28 @@
         ],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 58,
+        "title": "完善并更新项目文档",
+        "description": "全面审查并更新项目的所有文档，包括 README.md、命令说明和特性描述，确保其内容与当前最新的代码功能、修复和发布流程完全一致。",
+        "details": "此任务旨在使项目文档达到生产级别质量，反映自初始版本以来的所有功能增强和错误修复。文档应清晰、准确、易于新用户理解和上手。\n1. **更新 README.md**: 基于任务9的初始版本进行扩展。在“使用方法”部分，详细说明 Cloudflare 命名隧道功能，包括如何配置 API 令牌（参考任务55的修复逻辑）。增加一个新的“核心特性”章节，重点介绍交互式 DNS 冲突处理（任务54和56），解释用户会看到的选项及其作用。\n2. **完善命令参考**: 审查所有 CLI 命令及其可用选项。确保每个命令都有清晰的示例。例如，`uvx proxy-local` 命令应详细说明如何使用自定义域名、如何处理认证等。\n3. **创建贡献指南 (CONTRIBUTING.md)**: 新建一个 `CONTRIBUTING.md` 文件。该文件应包含开发环境设置指南、代码风格要求、以及最重要的——提交信息规范。明确指出项目遵循“约定式提交”(Conventional Commits)，这是任务57中自动化发布流程的基础。\n4. **解释发布流程**: 在贡献指南或 README 的一个章节中，简要说明项目的版本发布流程。提及 `npm run release` 命令（来自任务57）的作用，以及 `CHANGELOG.md` 是如何自动生成的，方便贡献者和用户了解版本历史。\n5. **文档结构优化**: 评估 README.md 的长度和复杂性。如果内容过多，考虑创建一个 `docs/` 目录，并将高级用法、API 详情或特定提供商（如 Cloudflare）的深入指南拆分到单独的 Markdown 文件中，然后在主 README 中链接到它们。",
+        "testStrategy": "1. **新用户模拟测试**: 邀请一位不熟悉近期项目开发的同事，让他/她仅根据更新后的文档，从零开始完成安装、配置 Cloudflare API 令牌，并成功创建一个命名隧道。观察过程中是否有任何困惑或文档与实际不符之处。\n2. **功能覆盖验证**: 逐一执行文档中列出的所有命令和示例。特别要触发一次 DNS 冲突场景，验证交互式菜单（任务54）的行为是否与文档描述完全一致。\n3. **贡献流程演练**: 严格按照新的 `CONTRIBUTING.md` 指南，在本地创建一个新的分支，进行一次小的代码修改，使用正确的格式提交 commit，并尝试运行发布流程的干运行（dry-run）模式，验证流程说明的准确性。\n4. **同行评审**: 将所有文档的变更提交为一个 Pull Request，并要求至少一位核心开发人员进行审查，检查技术描述的准确性、语言的清晰度和格式的规范性。",
+        "status": "in-progress",
+        "dependencies": [
+          53,
+          54,
+          55,
+          56,
+          57
+        ],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-09-05T13:44:42.534Z",
-      "updated": "2025-09-07T16:11:48.516Z",
+      "updated": "2025-09-07T16:33:22.928Z",
       "description": "Tasks for master context"
     }
   }
