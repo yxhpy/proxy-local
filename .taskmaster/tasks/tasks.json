@@ -281,7 +281,7 @@
         "details": "在调用 `createTunnel` 的地方使用 `try...catch` 块。在 `catch` 块中，检查错误的类型或消息，并向用户提供有意义的反馈。例如，如果端口无效，提示“端口必须是数字”。如果 `localtunnel` 连接失败，提示“无法连接到穿透服务，请检查网络连接”。可以使用 `chalk.red` 来显示错误消息。",
         "testStrategy": "模拟各种错误场景进行测试：1. 提供一个非数字端口 `uvx proxy-local test`。2. 提供一个未被监听的端口。3. 在断网环境下运行命令。验证每种情况下程序是否都能捕获错误并显示正确的错误信息，而不是崩溃。",
         "priority": "medium",
-        "dependencies": [ 
+        "dependencies": [
           4
         ],
         "status": "done",
@@ -812,11 +812,288 @@
             "testStrategy": ""
           }
         ]
+      },
+      {
+        "id": 42,
+        "title": "实现 Cloudflare DNS 记录查询功能",
+        "description": "开发一个模块，用于通过 Cloudflare API 查询指定域名的 DNS 记录，以判断记录是否已存在。这是智能更新功能的基础。",
+        "details": "使用官方 Cloudflare API v4。需要实现一个函数 `findDnsRecord(domain, type)`，该函数会发送 GET 请求到 `https://api.cloudflare.com/client/v4/zones/:zone_id/dns_records`。需要处理 API 认证（使用 API Token 或 Key）。函数应返回找到的记录对象或 null。伪代码：\nasync function findDnsRecord(zoneId, recordName) {\n  const response = await fetch(`.../dns_records?name=${recordName}`, {\n    headers: { 'Authorization': 'Bearer ...' }\n  });\n  const data = await response.json();\n  return data.result.length > 0 ? data.result[0] : null;\n}",
+        "testStrategy": "单元测试：模拟 Cloudflare API 响应，测试函数在记录存在和不存在两种情况下的返回值。集成测试：使用真实的 Cloudflare API 凭证和测试域名，验证能否正确查询到记录。",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 43,
+        "title": "开发 Cloudflare DNS 记录更新逻辑",
+        "description": "基于查询结果，实现更新现有 DNS 记录的功能。如果记录已存在，则调用 API 更新其内容（如 IP 地址）。",
+        "details": "实现一个函数 `updateDnsRecord(recordId, data)`。该函数将向 `https://api.cloudflare.com/client/v4/zones/:zone_id/dns_records/:record_id` 发送 PUT 或 PATCH 请求。请求体应包含需要更新的字段，例如 `content` (IP 地址), `proxied` 等。必须处理 API 调用可能出现的错误，如权限不足或无效的记录 ID。",
+        "testStrategy": "单元测试：模拟 API 调用，验证请求体是否正确构建。集成测试：使用测试账户，实际更新一条 DNS 记录并验证其内容是否按预期改变。",
+        "priority": "high",
+        "dependencies": [
+          42
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 44,
+        "title": "集成 DNS 智能更新流程与用户反馈",
+        "description": "将查询、创建和更新逻辑整合在一起。根据记录是否存在，自动选择执行创建或更新操作，并向用户提供明确的操作反馈（例如“已更新记录”或“已创建新记录”）。",
+        "details": "创建一个主函数，该函数首先调用 `findDnsRecord`。如果返回记录，则调用 `updateDnsRecord`；如果返回 null，则调用现有的创建记录函数。使用 `console.log` 或类似的日志库向用户清晰地输出操作结果。实现一个 try-catch 块来捕获整个流程中的错误，并向用户显示友好的错误信息。",
+        "testStrategy": "端到端测试：1. 运行命令处理一个不存在的记录，验证是否创建成功并提示用户。2. 再次运行相同命令，验证是否更新成功并提示用户。3. 测试 API 凭证错误等失败场景，验证错误信息是否正确显示。",
+        "priority": "medium",
+        "dependencies": [
+          43
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 45,
+        "title": "实现代理进程后台化运行",
+        "description": "修改代理启动逻辑，使其在成功建立连接后，将自身转为后台守护进程（daemonize）运行，并释放当前终端。",
+        "details": "可以使用成熟的进程管理库，如 Node.js 环境下的 `pm2` API 模式或 `daemonize-process`。在代理连接成功的回调中，调用库函数将当前进程转为后台运行。需要确保子进程与父进程分离（detached），并且标准输入/输出/错误流被重定向，以避免终端关闭时进程被终止。",
+        "testStrategy": "手动测试：启动一个代理，验证终端是否立即返回可用状态。使用 `ps aux | grep uvx-proxy-local` 命令检查代理进程是否仍在后台运行。",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 46,
+        "title": "建立后台进程信息持久化机制",
+        "description": "设计并实现一个机制，用于存储和管理所有后台代理进程的信息，包括 PID、本地端口、远程 URL、提供商等。",
+        "details": "创建一个本地文件（如 `~/.uvx/processes.json`）来存储一个进程信息对象的数组。当一个进程成功后台化后，将其信息（PID、启动时间、端口等）追加到此文件中。当进程被终止时，应从文件中移除对应条目。需要实现文件读写的锁定机制，以防止并发操作导致数据损坏。",
+        "testStrategy": "单元测试：测试进程信息的添加和移除功能。集成测试：启动和停止多个代理进程，检查 `processes.json` 文件的内容是否与实际运行的进程状态一致。",
+        "priority": "high",
+        "dependencies": [
+          45
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 47,
+        "title": "开发 `uvx-proxy-local list` 命令",
+        "description": "实现 `list` 子命令，用于读取持久化的进程信息文件，并以格式化的表格形式在终端中显示所有正在运行的代理进程的详细信息。",
+        "details": "该命令将读取 `~/.uvx/processes.json` 文件。为确保信息准确，可以对每个条目通过 `process.kill(pid, 0)` 检查进程是否仍然存活，并过滤掉已不存在的进程。使用 `console.table` 或 `cli-table3` 等库来美化输出，显示的列应包括 PID、本地端口、远程 URL、提供商、状态、启动时间等。",
+        "testStrategy": "手动测试：1. 未启动任何代理时运行 `list`，应显示空列表或提示信息。2. 启动一个或多个代理后运行 `list`，验证显示的信息是否完整、准确且格式正确。3. 手动 kill 一个进程后再次运行 `list`，验证该进程是否不再显示。",
+        "priority": "high",
+        "dependencies": [
+          46
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 48,
+        "title": "实现 `uvx-proxy-local kill <pid>` 命令",
+        "description": "实现 `kill` 子命令，允许用户通过提供进程 ID (PID) 来直接、快速地终止一个指定的后台代理进程。",
+        "details": "该命令接收一个 PID 作为参数。首先，从 `processes.json` 文件中查找该 PID。如果找到，使用 `process.kill(pid, 'SIGTERM')` 发送终止信号。实现一个等待和重试机制，如果在几秒钟后进程仍未退出，则强制使用 `SIGKILL`。成功终止后，从 `processes.json` 文件中移除该进程的记录。",
+        "testStrategy": "手动测试：1. 启动一个代理并获取其 PID。2. 运行 `uvx-proxy-local kill <pid>`，验证进程是否被终止（通过 `ps` 命令确认）。3. 运行 `list` 命令，验证该进程已从列表中移除。4. 尝试 kill 一个不存在的 PID，验证是否返回适当的错误信息。",
+        "priority": "medium",
+        "dependencies": [
+          46
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 49,
+        "title": "构建交互式进程终止界面",
+        "description": "当 `uvx-proxy-local kill` 命令不带参数运行时，启动一个交互式界面，列出所有运行中的代理，并允许用户使用上下键选择一个或多个进程进行终止。",
+        "details": "使用 `inquirer` 或 `enquirer` 库。首先调用与 `list` 命令类似的功能获取正在运行的进程列表。然后，使用 `inquirer` 的 `checkbox` 或 `list` 提示类型来展示这些进程。用户可以使用空格键进行多选（如果使用 `checkbox`），或上下键单选。界面应清晰地显示每个选项的关键信息（如 PID 和 URL）。",
+        "testStrategy": "手动测试：运行 `uvx-proxy-local kill`。1. 验证是否显示了所有正在运行的代理列表。2. 验证上下箭头键是否能正常移动光标。3. 验证空格键（或回车键）是否能正确选择/取消选择进程。",
+        "priority": "high",
+        "dependencies": [
+          47
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 50,
+        "title": "完成交互式终止的确认与执行逻辑",
+        "description": "在用户于交互式界面中选择进程后，提供一个确认步骤，并在用户确认后，批量终止所有选定的进程。",
+        "details": "在用户完成选择并按回车后，使用 `inquirer` 的 `confirm` 提示类型，向用户显示将要终止的进程列表并请求确认。如果用户确认，则遍历选中的进程 PID 列表，依次调用 `kill <pid>` 的核心逻辑来终止它们。为用户提供清晰的批量操作结果反馈，例如“成功终止 3 个进程”。",
+        "testStrategy": "手动测试：1. 在交互式界面中选择一个或多个进程。2. 在确认步骤中选择“是”，验证所有选定进程是否被终止。3. 再次启动进程，在确认步骤中选择“否”，验证没有任何进程被终止。",
+        "priority": "medium",
+        "dependencies": [
+          48,
+          49
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 51,
+        "title": "实现 `uvx-proxy-local status` 命令并完善 CLI",
+        "description": "开发 `status` 命令以显示更详细的代理状态信息，并对整个命令行接口进行最终整合和测试，确保所有命令和选项都按预期工作。",
+        "details": "`status` 命令可以复用 `list` 的逻辑，但提供更详尽的信息，例如内存/CPU 使用率（可通过 `pidusage` 等库获取）、总运行时间、流量统计（如果可实现）等。最后，检查所有命令 (`list`, `kill`, `status`) 的帮助信息、参数解析和错误处理，确保 CLI 的一致性和易用性。",
+        "testStrategy": "端到端测试：全面测试所有命令及其组合。例如，启动代理 -> `list` 查看 -> `status` 查看详情 -> `kill <pid>` 终止一个 -> `kill` 交互式终止其余的。验证每个步骤的输出是否符合预期，并检查边缘情况（如列表为空、PID 无效等）。",
+        "priority": "low",
+        "dependencies": [
+          47
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 52,
+        "title": "实现基于 API 令牌的 Cloudflare 认证与验证",
+        "description": "重构现有的 Cloudflare 自定义 DNS 认证流程，废弃复杂的浏览器登录方式，转而采用更稳定、更直接的 API 令牌验证机制，以解决登录问题并提升用户体验。",
+        "details": "此任务旨在彻底改造 Cloudflare 的身份验证模块，核心是实现一个最小化的 API 令牌验证流程。1. **弃用旧流程**：移除或标记为废弃当前基于 `cloudflared tunnel login` 的浏览器认证逻辑（源于任务24），因为它不稳定且难以自动化。2. **引入 API 令牌配置**：用户将通过 CLI 交互或配置文件（例如 `~/.uvx/config.json`）提供 Cloudflare API 令牌。需要实现一个安全的机制来存储此令牌，确保文件权限正确（如 600）。3. **开发核心验证功能**：创建一个名为 `verifyCloudflareToken(token)` 的异步函数。此函数的唯一职责是验证令牌的有效性。最佳实践是调用 Cloudflare API 的 `/client/v4/user/tokens/verify` 端点。如果该令牌有效，API 将返回成功状态。这是一个轻量级的只读操作，非常适合用于快速验证。4. **集成交互式提示**：当用户首次执行需要认证的操作时（例如，从 Cloudflare 账户选择域名），系统应检查令牌是否存在且有效。如果无效或缺失，应启动一个交互式提示（可使用 `inquirer.js`），引导用户输入他们的 API 令牌，并提供一个清晰的链接和说明，指导用户在 Cloudflare 仪表板上创建具有正确权限（至少需要 `Zone:Zone:Read` 和 `Zone:DNS:Edit`）的令牌。5. **重构现有模块**：修改任务41中实现的域名选择功能和任务42/43中的 DNS 操作函数，使其不再依赖 `cloudflared` 的登录状态，而是直接使用已验证并存储的 API 令牌来初始化 Cloudflare API 客户端。",
+        "testStrategy": "1. **单元测试**：为 `verifyCloudflareToken` 函数编写测试用例。使用模拟的 API 响应来测试三种情况：a) 提供一个有效的令牌，函数应返回 true；b) 提供一个格式错误或无效的令牌，函数应返回 false 并记录错误；c) 提供一个权限不足的令牌，函数应返回 false 并提示权限问题。2. **集成测试**：在一个干净的环境中（没有配置令牌），运行需要认证的命令（如 `uvx proxy-local --list-domains`）。验证系统是否正确地提示用户输入 API 令牌。3. **端到端测试（有效令牌）**：按照提示输入一个有效的 Cloudflare API 令牌。验证令牌是否被正确保存，并且命令是否成功执行（例如，正确列出账户下的域名）。之后再次运行相同命令，验证系统不再提示输入令牌，而是直接使用已保存的令牌。4. **端到端测试（无效令牌）**：在提示时输入一个无效的令牌。验证系统是否显示清晰的错误信息“令牌无效或权限不足”，并终止操作。5. **配置管理测试**：实现并测试一个命令（如 `uvx config --reset-cloudflare-token`）来清除已存储的令牌，并验证清除后再次运行命令会重新触发输入提示。",
+        "status": "done",
+        "dependencies": [
+          24,
+          41,
+          42,
+          43
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "废弃旧版浏览器认证并实现安全的 API 令牌存储机制",
+            "description": "移除或标记为废弃当前基于 `cloudflared tunnel login` 的认证逻辑（源于任务24），并实现一个用于读取和写入 Cloudflare API 令牌到配置文件（如 `~/.uvx/config.json`）的模块，同时确保文件权限被安全地设置为 600。",
+            "dependencies": [],
+            "details": "此任务是重构的第一步，旨在清理旧代码并为新的令牌机制奠定基础。需要创建一个配置管理模块，包含 `saveToken(token)` 和 `loadToken()` 两个核心函数。`saveToken` 函数在写入令牌后，必须使用 Node.js 的 `fs.chmodSync` 或等效方法将文件权限设置为 600，以保护令牌不被其他用户读取。",
+            "status": "done",
+            "testStrategy": "1. 单元测试：验证 `saveToken` 函数是否正确写入令牌并设置了 600 文件权限。2. 单元测试：验证 `loadToken` 函数在文件存在时能正确读取令牌，在文件不存在时返回 null。3. 代码审查：确认所有调用 `cloudflared tunnel login` 的代码已被移除或被新逻辑替代。"
+          },
+          {
+            "id": 2,
+            "title": "开发核心 API 令牌验证函数",
+            "description": "创建一个独立的异步函数 `verifyCloudflareToken(token)`，该函数通过调用 Cloudflare API 的 `/client/v4/user/tokens/verify` 端点来验证所提供令牌的有效性、状态和权限。",
+            "dependencies": [],
+            "details": "此函数是认证流程的核心。它应接受一个字符串类型的令牌作为参数，并返回一个布尔值或包含状态信息的对象。函数内部需使用 `axios` 或 `node-fetch` 发起一个 `GET` 请求到 Cloudflare API。必须正确处理网络错误、API 错误（如 401 未授权、403 权限不足）和成功响应（HTTP 200）。",
+            "status": "done",
+            "testStrategy": "为 `verifyCloudflareToken` 函数编写单元测试，使用 `moxios` 或 `nock` 模拟 API 响应：a) 模拟有效令牌的成功响应（返回 true）；b) 模拟无效或过期令牌的失败响应（返回 false）；c) 模拟网络错误（抛出异常或返回 false）；d) 模拟权限不足的令牌响应。"
+          },
+          {
+            "id": 3,
+            "title": "实现交互式 API 令牌输入与引导流程",
+            "description": "当系统检测到需要认证但令牌缺失或无效时，启动一个交互式命令行提示，引导用户输入他们的 Cloudflare API 令牌，并提供创建令牌的详细说明。",
+            "dependencies": [
+              "52.2"
+            ],
+            "details": "使用 `inquirer.js` 库创建一个用户友好的提示。提示信息应清晰地告知用户需要一个 API 令牌，并提供一个可点击的链接（https://dash.cloudflare.com/profile/api-tokens）指向 Cloudflare 仪表板的令牌创建页面。同时，明确指出令牌所需的最小权限：`Zone:Zone:Read` 和 `Zone:DNS:Edit`。",
+            "status": "done",
+            "testStrategy": "1. 手动集成测试：在一个没有配置令牌的环境中，运行需要认证的命令，验证交互式提示是否按预期触发。2. 验证输入：输入一个虚构的令牌，确认系统会接收并尝试验证它。3. 验证引导信息：检查提示中显示的链接和权限说明是否清晰、准确。"
+          },
+          {
+            "id": 4,
+            "title": "整合完整的令牌获取与验证工作流",
+            "description": "将令牌的读取、验证和交互式输入提示整合为一个统一的、可复用的认证函数，例如 `getValidCloudflareToken()`。此函数将作为所有需要认证操作的入口点。",
+            "dependencies": [
+              "52.1",
+              "52.2",
+              "52.3"
+            ],
+            "details": "实现 `getValidCloudflareToken()` 异步函数。其逻辑应为：1. 尝试从配置文件加载令牌（调用子任务52.1的功能）。2. 如果找到令牌，调用 `verifyCloudflareToken`（子任务52.2）进行验证。3. 如果令牌有效，返回该令牌。4. 如果令牌不存在或无效，则触发交互式提示（子任务52.3）让用户输入新令牌。5. 获取新令牌后，先验证其有效性，验证通过后将其保存到配置文件（子任务52.1），然后返回该令牌。如果用户输入了无效令牌，应允许重试。",
+            "status": "done",
+            "testStrategy": "1. 集成测试（无令牌场景）：在一个干净的环境中调用该函数，验证它是否能完整地走完“提示输入 -> 验证 -> 保存 -> 返回令牌”的流程。2. 集成测试（有令牌场景）：预先配置一个有效的令牌，调用函数，验证它是否能直接读取并返回令牌，跳过交互提示。3. 集成测试（无效令牌场景）：预先配置一个无效的令牌，调用函数，验证它是否会提示用户输入新令牌。"
+          },
+          {
+            "id": 5,
+            "title": "重构域名选择与 DNS 操作模块以使用新认证机制",
+            "description": "修改任务41（域名选择功能）和任务42/43（DNS 操作函数）中的相关代码，使其不再依赖旧的登录状态，而是统一调用新的 `getValidCloudflareToken()` 函数来获取令牌并初始化 Cloudflare API 客户端。",
+            "dependencies": [
+              "52.4"
+            ],
+            "details": "在需要与 Cloudflare API 交互的地方（如列出域名、查询/更新 DNS 记录），将原有的认证检查替换为对 `getValidCloudflareToken()` 的调用。获取到有效令牌后，将其用于设置 API 请求的 `Authorization` 头（例如 `Bearer ${token}`）。确保所有相关的 API 调用都使用此令牌进行鉴权。",
+            "status": "done",
+            "testStrategy": "1. 端到端测试（域名选择）：运行 `uvx proxy-local` 并选择从 Cloudflare 账户选择域名。验证系统是否通过新的令牌机制成功获取并列出域名。2. 端到端测试（DNS 更新）：选择一个自定义域名进行代理，验证系统是否能使用新令牌成功查询和更新 DNS A 记录。3. 回归测试：确保废弃旧认证逻辑后，原有的功能（如临时隧道）不受影响。"
+          }
+        ]
+      },
+      {
+        "id": 53,
+        "title": "修复 Cloudflare 命名隧道的 DNS 路由配置失败问题",
+        "description": "修复在使用 API 令牌成功创建命名隧道后，因 DNS 路由配置失败而导致整个设置流程中断的错误。此任务将诊断并纠正 DNS 记录创建逻辑，确保 CNAME 记录能被正确添加到用户的 Cloudflare 账户中。",
+        "details": "此任务的核心是解决 API 令牌认证通过后，`cloudflared` 创建命名隧道成功但配置 DNS 路由失败的问题。首先，需要增强日志记录功能，在执行 `cloudflared tunnel route dns` 命令前后捕获完整的命令、参数以及 `stdout` 和 `stderr` 输出，以便精确诊断失败原因。其次，审查并重构获取 Zone ID 的逻辑，确保能根据用户提供的域名准确地从 Cloudflare API (`/client/v4/zones`) 匹配到正确的区域。然后，实现一个 API 权限预检功能：在尝试创建路由前，使用令牌调用一个只读的 DNS API 端点，验证其是否具备对目标 Zone 的 `Zone:DNS:Edit` 权限，若无则提前向用户报错。最后，修复核心的 DNS 路由创建逻辑，确保使用隧道的唯一 ID 而非名称来执行路由命令 (`cloudflared tunnel route dns <TUNNEL_ID> <HOSTNAME>`)，并改进错误处理机制，能解析 `cloudflared` 返回的特定错误码，为用户提供更清晰的指引，例如提示检查 API 令牌权限。",
+        "testStrategy": "测试策略分为集成测试和单元测试。1. **集成测试（失败场景）**：使用一个仅有隧道创建权限但缺少 `Zone:DNS:Edit` 权限的真实 Cloudflare API 令牌。执行创建命名隧道流程，验证程序是否在 DNS 路由阶段失败，并返回清晰、可操作的权限不足错误提示。2. **集成测试（成功场景）**：使用一个具备完整权限（包括 `Zone:DNS:Edit` 和 `Account:Cloudflare Tunnel:Edit`）的 API 令牌。执行创建流程，验证隧道创建成功，并且在 Cloudflare DNS 管理面板中，指定的域名下成功创建了指向 `<tunnel-id>.cfargotunnel.com` 的 CNAME 记录。3. **集成测试（冲突场景）**：在 Cloudflare 上为目标域名手动创建一个 A 记录。再次运行创建流程，验证系统能够正确处理已存在的记录（覆盖或报错），并确保应用状态一致。4. **单元测试**：为错误解析逻辑编写测试用例，模拟 `cloudflared` 返回的各种错误输出（如无效 Zone ID、认证失败等），验证函数能正确解析并分类这些错误。",
+        "status": "done",
+        "dependencies": [
+          24,
+          41,
+          42,
+          43,
+          52
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 54,
+        "title": "为 Cloudflare 隧道集成交互式 DNS 冲突处理",
+        "description": "在创建 Cloudflare 命名隧道时，自动检测并处理已存在的 DNS 记录。通过交互式菜单为用户提供更新、重命名、使用随机域名或退出的选项，提升用户体验。",
+        "details": "此任务旨在增强 CloudflareProvider 的 createTunnel 方法，以优雅地处理 DNS CNAME 记录已存在的常见冲突。当 `cloudflared tunnel route dns` 命令因记录重复而失败时（通常返回包含“CNAME record with that name already exists”和 API 代码 81057 的错误），程序不应直接退出，而应捕获此特定错误并启动一个交互式流程。\n1. **错误检测**：在 `CloudflareProvider` 的 `try...catch` 块中，精确匹配 `stderr` 输出，以识别 DNS 记录已存在的特定错误。\n2. **交互式提示**：使用 `inquirer` 或类似库向用户展示一个清晰的菜单，包含以下四个选项：\n   - **更新现有记录**：将现有 CNAME 记录指向新的隧道。\n   - **输入新的子域名**：允许用户提供一个不同的主机名。\n   - **使用随机域名**：回退到创建临时的 `trycloudflare.com` 隧道。\n   - **退出**：安全地终止程序。\n3. **逻辑实现**：\n   - **更新**：重新执行 `cloudflared tunnel route dns` 命令，但附加 `--overwrite-dns` 标志以强制更新记录。\n   - **新子域名**：提示用户输入新的主机名，然后使用新名称重新尝试 DNS 路由逻辑。\n   - **随机域名**：调用内部用于创建临时隧道的逻辑（源于任务23），并返回其 URL。\n   - **退出**：调用 `process.exit(0)` 正常退出。\n4. **代码结构**：建议将冲突处理逻辑封装在一个私有辅助方法中，如 `_handleDnsConflict(tunnelId, failedHostname)`，以保持 `createTunnel` 方法的整洁。",
+        "testStrategy": "测试需要一个配置了有效 API 令牌的 Cloudflare 账户。\n1. **准备工作**：在 Cloudflare DNS 管理面板中，为测试域名手动创建一个 CNAME 记录，例如 `test-conflict.yourdomain.com`。\n2. **冲突触发测试**：运行 `uvx proxy-local` 命令并尝试使用 `test-conflict.yourdomain.com` 创建隧道。验证程序是否捕获了错误并成功显示了包含四个选项的交互式提示。\n3. **“更新”选项测试**：在提示中选择“更新现有记录”。验证命令是否成功完成，并在 Cloudflare 面板中检查该 CNAME 记录是否已更新，指向新的隧道 ID。\n4. **“新子域名”选项测试**：再次触发冲突，在提示中选择“输入新的子域名”。输入一个未使用的主机名（如 `new-test.yourdomain.com`），验证隧道是否使用新名称成功创建。\n5. **“随机域名”选项测试**：再次触发冲突，在提示中选择“使用随机域名”。验证程序是否成功创建并输出一个 `*.trycloudflare.com` 的临时隧道 URL。\n6. **“退出”选项测试**：再次触发冲突，在提示中选择“退出”。验证程序是否干净地终止，没有创建任何隧道或 DNS 记录。\n7. **无冲突测试**：使用一个全新的、不存在的子域名运行命令，验证程序是否直接成功创建隧道，不显示任何冲突提示。",
+        "status": "done",
+        "dependencies": [
+          53,
+          52,
+          24,
+          23
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 55,
+        "title": "修复 Cloudflare API 令牌缓存与验证逻辑",
+        "description": "修复一个关键错误：即使用户已成功保存新的 Cloudflare API 令牌，程序重启后仍错误地提示认证失败。此任务将全面调试令牌的存储、读取和验证流程，确保认证状态的持久性。",
+        "details": "此任务旨在解决 Cloudflare API 令牌在本地存储后，应用重启时无法正确加载和验证的问题。根本原因可能是文件读写逻辑错误，或内存中的状态与磁盘上的状态不同步。\n1. **增强日志记录**：在令牌处理的整个生命周期中添加详细的调试日志。包括：令牌保存到配置文件的路径和内容、应用启动时从文件读取的令牌值、发送到 Cloudflare API 进行验证的令牌（屏蔽部分关键字符）。\n2. **审查存储逻辑**：仔细检查将令牌写入配置文件的代码（例如 `~/.uvx/config.json`）。确保文件写入是同步操作或正确处理了异步回调/Promise，防止应用在文件完全写入前退出。验证文件权限是否正确设置。\n3. **审查加载逻辑**：检查应用启动时读取配置文件的逻辑。确保在进行任何需要认证的操作之前，令牌已经被正确加载到内存中的配置对象中。防止使用过时或默认的空值。\n4. **验证流程校对**：确认调用 Cloudflare 的 `/user/tokens/verify` 端点的函数（源于任务52）始终使用从文件中最新读取的令牌。修复任何可能导致内存中旧令牌被错误重用的状态管理问题。\n5. **实施修复**：根据调试结果，修复核心问题。很可能需要确保在用户输入新令牌并保存后，立即更新应用内部的配置状态，而不仅仅是写入文件。",
+        "testStrategy": "测试需要一个有效的 Cloudflare API 令牌。\n1. **复现错误**：在一个干净的环境中（删除 `~/.uvx/config.json`），运行需要认证的命令。当提示输入令牌时，提供一个有效的令牌。确认操作成功。然后，完全关闭并重启应用程序。验证问题是否复现：程序不应再次要求输入令牌。\n2. **验证修复（有效令牌）**：应用修复后，重复步骤1。程序重启后，应能自动、静默地使用已保存的令牌完成认证，并直接执行后续操作，不再提示输入。\n3. **验证无效令牌处理**：手动编辑配置文件，将令牌修改为一个无效的字符串。启动程序。程序应能正确检测到令牌无效（通过API验证失败），并友好地提示用户输入一个新的有效令牌。\n4. **验证令牌更新流程**：在程序运行期间，通过相应命令更新为一个新的有效令牌。重启程序，验证新令牌是否生效。同时，检查配置文件中的内容是否已正确更新为新令牌。",
+        "status": "done",
+        "dependencies": [
+          52,
+          53,
+          24
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 56,
+        "title": "修复 DNS 冲突处理的交互式菜单未触发问题",
+        "description": "调试并修复在 Cloudflare 命名隧道创建过程中，检测到 DNS 记录冲突时交互式选择菜单未能正确显示给用户的问题。确保 `_handleDnsConflict` 方法能够可靠地暂停执行并等待用户输入。",
+        "details": "此任务旨在解决在检测到 DNS 记录冲突后，本应由任务54实现的交互式菜单没有被触发的严重错误。根本原因很可能与异步流程控制或子进程的输入/输出流干扰有关。\n1. **增强日志记录**：在 `CloudflareProvider` 的 `_handleDnsConflict` 方法的入口和出口，以及调用 `inquirer` 之前，添加详细的调试日志。记录捕获到的具体错误信息和程序状态，以确认该方法是否被正确调用。\n2. **审查异步流程**：仔细检查 `_handleDnsConflict` 方法及其调用链。确保所有返回 Promise 的函数都被正确地 `await`。特别注意 `cloudflared` 子进程的执行和错误捕获逻辑，确保在尝试显示交互式提示之前，子进程已经完全结束，并且其输出流已被处理完毕。\n3. **隔离输入/输出流**：`cloudflared` 子进程的输出可能会干扰 `inquirer` 对 `stdin` 和 `stdout` 的控制。在调用 `inquirer.prompt()` 之前，确认子进程的 I/O 流已经被关闭或不再活动。可以尝试在调用提示前加入一个短暂的延迟（`setTimeout`）作为诊断手段，但这不应是最终解决方案。\n4. **实施修复**：根据诊断结果，实施修复。这可能包括添加缺失的 `await` 关键字，重构 Promise 链以确保顺序执行，或者更明确地管理子进程的生命周期和 I/O。\n5. **添加环境检查**：为增强健壮性，在调用 `inquirer` 之前增加一个检查，确认当前环境是否为交互式终端（`process.stdout.isTTY`）。如果不是，则应跳过交互式提示，直接以失败告终并打印明确的错误信息。",
+        "testStrategy": "测试需要一个已配置有效 Cloudflare API 令牌的环境。\n1. **复现错误**：遵循任务54的测试准备步骤，在 Cloudflare DNS 中手动创建一个 CNAME 记录（例如 `conflict.yourdomain.com`）。运行命令尝试使用完全相同的主机名创建隧道。验证当前行为：程序应直接跳过交互式菜单，并可能错误地继续执行或失败，而不是显示选项。\n2. **验证修复**：应用修复补丁后，重复步骤1。程序现在必须能够正确地暂停，并清晰地显示包含“更新现有记录”、“输入新的子域名”、“使用随机域名”和“退出”四个选项的交互式菜单。\n3. **功能回归测试**：系统地测试交互式菜单的每一个选项，确保其功能未受影响：\n   - 选择“更新现有记录”，验证命令成功执行，并且 Cloudflare DNS 面板中的记录被正确更新。\n   - 选择“输入新的子域名”，提供一个有效的新名称，验证隧道是否以新名称成功创建。\n   - 选择“使用随机域名”，验证程序是否回退到创建临时的 `trycloudflare.com` 隧道。\n   - 选择“退出”，验证程序是否干净地终止，没有创建任何隧道或DNS记录。\n4. **非交互式环境测试**：通过管道重定向命令的输出（例如 `uvx proxy-local ... | cat`）来模拟非 TTY 环境。验证程序是否能检测到此环境，不尝试显示菜单，并打印一条指示无法进行交互式操作的错误信息后退出。",
+        "status": "done",
+        "dependencies": [
+          54,
+          53,
+          24
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 57,
+        "title": "实施版本发布流程",
+        "description": "建立一个标准化、自动化的流程，用于更新版本号、生成变更日志、构建、测试并将新版本的软件包发布到 npm。",
+        "details": "此任务旨在规范化并简化版本发布过程，减少手动操作和潜在错误。我们将采用业界最佳实践，如语义化版本（SemVer）和约定式提交（Conventional Commits）。\n1. **引入版本管理工具**：集成 `standard-version` 工具（或类似工具如 `release-it`）。该工具可以根据约定式提交消息自动确定版本号（补丁、次版本或主版本）、生成 `CHANGELOG.md` 文件，并创建和推送 Git 标签。\n2. **配置 npm 脚本**：在 `package.json` 中创建一个名为 `release` 的新脚本。此脚本将串联整个发布流程，确保每一步都按顺序执行。\n   ```json\n   \"scripts\": {\n     \"release\": \"npm test && standard-version && git push --follow-tags origin main && npm publish\"\n   }\n   ```\n3. **流程分解**：\n   - `npm test`：在发布前运行所有测试套件，确保代码质量和功能稳定性。\n   - `standard-version`：核心步骤。它会读取 git 提交历史，自动提升 `package.json` 中的版本号，基于提交记录更新 `CHANGELOG.md`，然后提交这些更改并创建一个新的版本标签（例如 `v1.2.3`）。\n   - `git push --follow-tags origin main`：将新的提交和版本标签推送到远程 Git 仓库。\n   - `npm publish`：将软件包构建并发布到 npm 公共注册中心。此步骤要求执行者已通过 `npm login` 登录或在 CI/CD 环境中配置了 `NPM_TOKEN`。\n4. **CI/CD 集成（可选）**：为了实现完全自动化，可以配置一个持续集成/持续部署（CI/CD）管道（例如使用 GitHub Actions）。当代码合并到主分支或手动触发工作流时，该管道将自动执行 `npm run release` 脚本。",
+        "testStrategy": "由于此任务是关于流程的建立，测试策略侧重于验证该流程的每个环节是否都能正确、可靠地工作。\n1. **Dry Run 验证**：在不实际修改文件或发布的情况下，执行 `standard-version --dry-run` 命令。检查其输出，验证工具是否能正确解析提交历史，并预测出正确的版本号和变更日志条目。\n2. **本地模拟发布**：在本地特性分支上，完整运行 `npm run release` 脚本，但将最后一步替换为 `npm publish --dry-run`。验证以下几点：\n   - `package.json` 中的版本号是否已正确更新。\n   - `CHANGELOG.md` 文件是否已生成并包含了最新的提交信息。\n   - 是否已在本地成功创建了对应的 Git 标签。\n3. **预发布（Beta）测试**：执行一个到 npm `beta` 频道的预发布。使用命令 `standard-version --prerelease beta` 创建一个预发布版本（如 `v1.2.3-beta.0`），然后使用 `npm publish --tag beta` 将其发布。在一个新的测试项目中安装此 beta 版本，验证其功能是否符合预期。\n4. **首次生产发布监控**：在执行第一次正式发布时，密切监控每个步骤的控制台输出。发布成功后，立即访问 npmjs.com 上的包页面，确认新版本已上线。最后，通过 `npm install <package-name>@latest` 在一个干净的环境中安装最新版本，进行最终的功能验证。",
+        "status": "in-progress",
+        "dependencies": [
+          56,
+          55,
+          54,
+          53,
+          52
+        ],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-09-05T13:44:42.534Z",
-      "updated": "2025-09-06T17:15:49.490Z",
+      "updated": "2025-09-07T16:11:48.516Z",
       "description": "Tasks for master context"
     }
   }

@@ -4,6 +4,8 @@ import { Command } from 'commander';
 import { ProviderManager, CloudflareProvider, PinggyProvider, LocalTunnelProvider, ServeoProvider } from '../src/providers/index.js';
 import { formatter } from '../src/utils/output-formatter.js';
 import { configLoader } from '../src/config/index.js';
+import { processManager } from '../src/utils/process-manager.js';
+import { interactiveProcessManager } from '../src/utils/interactive-process-manager.js';
 
 const program = new Command();
 
@@ -34,6 +36,11 @@ program
   .option('--verbose', 'Enable verbose output')
   .option('--no-colors', 'Disable colored output')
   .option('--no-icons', 'Disable icon display')
+  .option('-d, --daemon', 'Run proxy in background/daemon mode')
+  .option('--list', 'List all running proxy processes')
+  .option('--kill [pid]', 'Kill a specific proxy process by PID, or show interactive menu if no PID provided')
+  .option('--kill-all', 'Kill all running proxy processes')
+  .option('--status', 'Show detailed status of all running processes')
   .action(async (port, options) => {
     // 加载配置 (CLI 参数会覆盖配置文件和环境变量)
     const cliConfig = {
@@ -147,6 +154,120 @@ program
       }
     }
 
+    // 处理进程管理命令
+    if (options.list) {
+      const runningProcesses = processManager.getRunningProcesses();
+      if (runningProcesses.length === 0) {
+        console.log(formatter.formatInfo('没有运行中的代理进程'));
+        return;
+      }
+      
+      console.log(formatter.formatTitle('运行中的代理进程'));
+      console.table(runningProcesses.map(proc => ({
+        PID: proc.pid,
+        Port: proc.port,
+        Provider: proc.provider,
+        URL: proc.url,
+        'Start Time': new Date(proc.startTime).toLocaleString(),
+        Status: proc.status
+      })));
+      
+      const stats = processManager.getProcessStats();
+      console.log(formatter.formatInfo(`总计: ${stats.total} 个进程`));
+      return;
+    }
+
+    if (options.kill !== undefined) {
+      // 检查是否提供了 PID
+      if (typeof options.kill === 'string') {
+        // 直接终止指定的 PID
+        const pid = parseInt(options.kill, 10);
+        if (isNaN(pid)) {
+          console.error('❌ 错误: PID 必须是有效数字');
+          process.exit(1);
+        }
+        
+        console.log(`🔄 正在终止进程 PID ${pid}...`);
+        const result = await processManager.killProcess(pid);
+        
+        if (result.success) {
+          console.log(formatter.formatSuccess(result.message));
+        } else {
+          console.log(formatter.formatError(result.message));
+          process.exit(1);
+        }
+      } else {
+        // 启动交互式菜单（当 options.kill 为 true 时）
+        console.log(formatter.formatTitle('交互式进程终止'));
+        const result = await interactiveProcessManager.showKillMenu();
+        
+        if (result.cancelled) {
+          console.log(formatter.formatInfo('操作已取消'));
+        } else if (result.error) {
+          console.log(formatter.formatError(result.error));
+          process.exit(1);
+        } else if (result.success) {
+          console.log(formatter.formatSuccess(`成功终止 ${result.killedProcesses} 个进程`));
+        }
+      }
+      return;
+    }
+
+    if (options.killAll) {
+      const runningProcesses = processManager.getRunningProcesses();
+      if (runningProcesses.length === 0) {
+        console.log(formatter.formatInfo('没有运行中的代理进程'));
+        return;
+      }
+      
+      console.log(`🔄 正在终止所有 ${runningProcesses.length} 个代理进程...`);
+      let success = 0;
+      let failed = 0;
+      
+      for (const proc of runningProcesses) {
+        const result = await processManager.killProcess(proc.pid);
+        if (result.success) {
+          success++;
+        } else {
+          failed++;
+        }
+      }
+      
+      console.log(formatter.formatInfo(`完成: ${success} 个成功终止, ${failed} 个失败`));
+      return;
+    }
+
+    if (options.status) {
+      const runningProcesses = processManager.getRunningProcesses();
+      const stats = processManager.getProcessStats();
+      
+      console.log(formatter.formatTitle('代理进程状态报告'));
+      
+      if (runningProcesses.length === 0) {
+        console.log(formatter.formatInfo('没有运行中的代理进程'));
+      } else {
+        console.table(runningProcesses.map(proc => ({
+          PID: proc.pid,
+          Port: proc.port,
+          Provider: proc.provider,
+          URL: proc.url,
+          'Start Time': new Date(proc.startTime).toLocaleString(),
+          'Running Time': Math.round((Date.now() - new Date(proc.startTime)) / 1000) + 's'
+        })));
+        
+        console.log('\n📊 统计信息:');
+        console.log(`总进程数: ${stats.total}`);
+        Object.entries(stats.byProvider).forEach(([provider, count]) => {
+          console.log(`${provider}: ${count} 个进程`);
+        });
+        
+        if (stats.oldestStart) {
+          console.log(`最早启动: ${stats.oldestStart.toLocaleString()}`);
+        }
+      }
+      return;
+    }
+
     // 如果用户只是想列出提供商
     if (options.listProviders) {
       const providers = manager.listProvidersInfo();
@@ -244,30 +365,106 @@ program
     }
     
     try {
-      // 使用智能回退创建隧道 (应用配置的超时和重试设置)
-      const result = await manager.createTunnelWithFallback(portNumber, selectedProvider, {
-        timeout: config.timeout,
-        retries: config.retries,
-        resetDomain: options.resetDomain
-      });
-      
-      // 显示成功信息 - 使用新的格式化器
-      const provider = manager.getCurrentProvider();
-      const features = provider.getFeatures();
-      
-      console.log(formatter.formatTunnelSuccess(result, provider, features));
-      
-      // 监听退出信号来清理隧道
-      process.on('SIGINT', async () => {
-        console.log(formatter.formatTunnelClosing());
-        try {
-          await provider.closeTunnel();
-          console.log(formatter.formatTunnelClosed());
-        } catch (error) {
-          console.log(formatter.formatWarning(`隧道关闭时出现警告: ${error.message}`));
+      // 处理后台模式
+      if (options.daemon) {
+        console.log(formatter.formatInfo('🚀 启动后台模式...'));
+        
+        // 创建隧道
+        const result = await manager.createTunnelWithFallback(portNumber, selectedProvider, {
+          timeout: config.timeout,
+          retries: config.retries,
+          resetDomain: options.resetDomain
+        });
+        
+        const provider = manager.getCurrentProvider();
+        
+        // 将进程信息保存到进程管理器
+        const processInfo = processManager.addProcess({
+          pid: process.pid,
+          port: portNumber,
+          url: result.url,
+          provider: provider.name,
+          originalUrl: result.originalUrl || result.url,
+          features: provider.getFeatures()
+        });
+        
+        if (processInfo) {
+          console.log(formatter.formatTunnelSuccess(result, provider, provider.getFeatures()));
+          
+          // 显示隧道使用指南（仅对 Cloudflare 提供商）
+          if (provider.name === 'cloudflare' && provider.showTunnelGuidance) {
+            provider.showTunnelGuidance(result.url);
+          }
+          
+          console.log(formatter.formatInfo(`✅ 进程已转为后台运行 (PID: ${process.pid})`));
+          console.log(formatter.formatInfo(`📋 使用 'uvx-proxy-local --list' 查看运行中的进程`));
+          console.log(formatter.formatInfo(`🛑 使用 'uvx-proxy-local --kill ${process.pid}' 终止此进程`));
+          
+          // 配置后台运行
+          processManager.daemonizeCurrentProcess();
+          
+          // 保持进程运行，监听终止信号
+          process.on('SIGTERM', async () => {
+            console.log(formatter.formatTunnelClosing());
+            try {
+              await provider.closeTunnel();
+              processManager.removeProcess(process.pid);
+              console.log(formatter.formatTunnelClosed());
+            } catch (error) {
+              console.log(formatter.formatWarning(`隧道关闭时出现警告: ${error.message}`));
+            }
+            process.exit(0);
+          });
+          
+          process.on('SIGINT', async () => {
+            console.log(formatter.formatTunnelClosing());
+            try {
+              await provider.closeTunnel();
+              processManager.removeProcess(process.pid);
+              console.log(formatter.formatTunnelClosed());
+            } catch (error) {
+              console.log(formatter.formatWarning(`隧道关闭时出现警告: ${error.message}`));
+            }
+            process.exit(0);
+          });
+        } else {
+          console.log(formatter.formatWarning('警告: 无法保存进程信息，但隧道已创建'));
+          console.log(formatter.formatTunnelSuccess(result, provider, provider.getFeatures()));
         }
-        process.exit(0);
-      });
+        
+        // 在后台模式下保持进程运行
+        return;
+      } else {
+        // 正常前台模式
+        const result = await manager.createTunnelWithFallback(portNumber, selectedProvider, {
+          timeout: config.timeout,
+          retries: config.retries,
+          resetDomain: options.resetDomain
+        });
+        
+        // 显示成功信息 - 使用新的格式化器
+        const provider = manager.getCurrentProvider();
+        const features = provider.getFeatures();
+        
+        console.log(formatter.formatTunnelSuccess(result, provider, features));
+        
+        // 显示隧道使用指南（仅对 Cloudflare 提供商）
+        if (provider.name === 'cloudflare' && provider.showTunnelGuidance) {
+          provider.showTunnelGuidance(result.url);
+        }
+        
+        // 监听退出信号来清理隧道
+        process.on('SIGINT', async () => {
+          console.log(formatter.formatTunnelClosing());
+          try {
+            await provider.closeTunnel();
+            console.log(formatter.formatTunnelClosed());
+          } catch (error) {
+            console.log(formatter.formatWarning(`隧道关闭时出现警告: ${error.message}`));
+          }
+          process.exit(0);
+        });
+      }
       
     } catch (error) {
       let suggestions = [];

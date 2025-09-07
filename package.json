@@ -15,7 +15,10 @@
     "test:fallback": "node test/fallback-mechanism.test.js",
     "test:formatter": "node test/output-formatter.test.js",
     "test:config": "node test/config-loader.test.js",
-    "start": "node bin/index.js"
+    "start": "node bin/index.js",
+    "release": "npm test && standard-version && git push --follow-tags origin master && npm publish",
+    "release:dry": "npm test && standard-version --dry-run",
+    "release:beta": "npm test && standard-version --prerelease beta && git push --follow-tags origin master && npm publish --tag beta"
   },
   "keywords": [
     "tunnel",
@@ -35,5 +38,8 @@
     "cosmiconfig": "^9.0.0",
     "inquirer": "^12.9.4",
     "localtunnel": "^2.0.2"
+  },
+  "devDependencies": {
+    "standard-version": "^9.5.0"
   }
 }

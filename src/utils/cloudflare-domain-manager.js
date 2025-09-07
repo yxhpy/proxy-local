@@ -4,15 +4,18 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import chalk from 'chalk';
+import { CloudflareAuth } from './cloudflare-auth.js';
 
 /**
  * Cloudflare 域名管理器
- * 处理域名选择、固定设置和A记录筛选
+ * 处理域名选择、固定设置、A记录筛选和DNS记录管理
  */
 export class CloudflareDomainManager {
   constructor() {
     this.configDir = join(homedir(), '.uvx');
     this.configFile = join(this.configDir, 'config.json');
+    this.apiBaseUrl = 'https://api.cloudflare.com/client/v4';
+    this.auth = new CloudflareAuth(); // 使用新的认证管理器
     this.initConfig();
   }
 
@@ -96,76 +99,39 @@ export class CloudflareDomainManager {
   }
 
   /**
-   * 检查用户是否已登录 Cloudflare
+   * 检查用户是否已通过 API 令牌认证（重构后）
+   * @returns {Promise<boolean>} 是否有有效的 API 令牌
    */
   async isAuthenticated() {
     try {
-      const cloudflaredDir = join(homedir(), '.cloudflared');
-      const certPath = join(cloudflaredDir, 'cert.pem');
-      
-      if (!existsSync(certPath)) {
-        return false;
-      }
-
-      return new Promise((resolve) => {
-        const child = spawn('cloudflared', ['tunnel', 'list'], {
-          stdio: ['ignore', 'pipe', 'pipe']
-        });
-
-        let hasValidOutput = false;
-
-        child.stdout.on('data', (data) => {
-          const output = data.toString();
-          if (output.includes('NAME') || output.includes('No tunnels') || output.includes('ID')) {
-            hasValidOutput = true;
-          }
-        });
-
-        child.on('close', (code) => {
-          resolve(hasValidOutput || code === 0);
-        });
-
-        child.on('error', () => {
-          resolve(false);
-        });
-
-        setTimeout(() => {
-          if (!child.killed) {
-            child.kill();
-            resolve(false);
-          }
-        }, 5000);
-      });
+      const token = await this.auth.getValidCloudflareToken();
+      return !!token;
     } catch (error) {
+      console.warn(chalk.yellow(`检查认证状态失败: ${error.message}`));
       return false;
     }
   }
 
   /**
-   * 执行 Cloudflare 登录
+   * 执行 Cloudflare API 令牌认证（重构后）
+   * @returns {Promise<boolean>} 认证是否成功
    */
   async performLogin() {
-    console.log(chalk.blue('🔐 启动 Cloudflare 登录流程...'));
-    console.log(chalk.yellow('请在浏览器中完成登录，然后回到终端。'));
+    console.log(chalk.blue('🔐 启动 Cloudflare API 令牌认证流程...'));
+    console.log(chalk.yellow('已废弃浏览器登录方式，使用更安全的 API 令牌认证'));
     
-    return new Promise((resolve, reject) => {
-      const child = spawn('cloudflared', ['tunnel', 'login'], {
-        stdio: 'inherit'
-      });
-
-      child.on('close', (code) => {
-        if (code === 0) {
-          console.log(chalk.green('✅ Cloudflare 登录成功！'));
-          resolve(true);
-        } else {
-          reject(new Error(`登录失败，退出代码: ${code}`));
-        }
-      });
-
-      child.on('error', (err) => {
-        reject(new Error(`启动登录进程失败: ${err.message}`));
-      });
-    });
+    try {
+      const success = await this.auth.ensureValidToken();
+      if (success) {
+        console.log(chalk.green('✅ Cloudflare API 令牌认证成功！'));
+        return true;
+      } else {
+        throw new Error('API 令牌认证失败');
+      }
+    } catch (error) {
+      console.error(chalk.red(`认证失败: ${error.message}`));
+      return false;
+    }
   }
 
   /**
@@ -200,6 +166,16 @@ export class CloudflareDomainManager {
   async showDomainSelectionMenu(options = {}) {
     const { resetDomain = false } = options;
     
+    // 检查环境变量中是否指定了自定义域名
+    const envCustomDomain = process.env.UVX_CUSTOM_DOMAIN;
+    if (envCustomDomain && !resetDomain) {
+      console.log(chalk.green(`🌍 使用环境变量指定的域名: ${envCustomDomain}`));
+      return {
+        type: 'custom',
+        domain: envCustomDomain
+      };
+    }
+    
     // 如果有固定域名且不是重置模式，直接使用
     if (!resetDomain) {
       const fixedDomain = this.getFixedDomain();
@@ -210,6 +186,15 @@ export class CloudflareDomainManager {
           domain: fixedDomain
         };
       }
+    }
+
+    // 检查是否为非交互式环境（CI/CD等）
+    if (process.env.CI || process.env.NON_INTERACTIVE || !process.stdin.isTTY) {
+      console.log(chalk.yellow('🤖 检测到非交互式环境，使用默认随机域名'));
+      return {
+        type: 'random',
+        domain: null
+      };
     }
 
     console.log(chalk.blue('🌐 请选择域名配置方式:'));
@@ -384,5 +369,330 @@ export class CloudflareDomainManager {
     console.log(chalk.blue('💡 域名管理提示:'));
     console.log(chalk.gray('  使用 --reset-domain 参数可以重新选择域名'));
     console.log(chalk.gray('  固定的域名配置保存在: ~/.uvx/config.json'));
+  }
+
+  /**
+   * 获取 Cloudflare API 凭据（重构后）
+   * 使用新的认证系统获取 API 令牌
+   * @returns {Promise<Object|null>} API 凭据对象或 null
+   */
+  async getApiCredentials() {
+    try {
+      const token = await this.auth.getValidCloudflareToken();
+      if (token) {
+        return {
+          type: 'token',
+          value: token
+        };
+      }
+      return null;
+    } catch (error) {
+      console.warn(chalk.yellow(`获取 API 凭据失败: ${error.message}`));
+      return null;
+    }
+  }
+
+  /**
+   * 创建 Cloudflare API 请求头
+   */
+  createApiHeaders(credentials) {
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+
+    if (credentials.type === 'token') {
+      headers['Authorization'] = `Bearer ${credentials.value}`;
+    } else if (credentials.type === 'key') {
+      headers['X-Auth-Email'] = credentials.email;
+      headers['X-Auth-Key'] = credentials.value;
+    }
+
+    return headers;
+  }
+
+  /**
+   * 获取域名的 Zone ID（重构后）
+   * @param {string} domain 域名
+   * @returns {Promise<string|null>} Zone ID 或 null
+   */
+  async getZoneId(domain) {
+    const credentials = await this.getApiCredentials();
+    if (!credentials) {
+      throw new Error('缺少有效的 Cloudflare API 令牌。请先设置 API 令牌');
+    }
+
+    try {
+      // 解析域名以获取根域名
+      const domainParts = domain.split('.');
+      const rootDomain = domainParts.length >= 2 
+        ? domainParts.slice(-2).join('.')
+        : domain;
+
+      const headers = this.createApiHeaders(credentials);
+      const url = `${this.apiBaseUrl}/zones?name=${rootDomain}`;
+
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Cloudflare API 请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(`Cloudflare API 错误: ${data.errors?.map(e => e.message).join(', ') || '未知错误'}`);
+      }
+
+      if (data.result && data.result.length > 0) {
+        return data.result[0].id;
+      }
+
+      return null;
+    } catch (error) {
+      console.error(chalk.red(`获取 Zone ID 失败: ${error.message}`));
+      throw error;
+    }
+  }
+
+  /**
+   * 查找 DNS 记录
+   * @param {string} zoneId Zone ID
+   * @param {string} recordName 记录名称
+   * @param {string} recordType 记录类型（默认 'CNAME'）
+   * @returns {Promise<Object|null>} DNS 记录对象或 null
+   */
+  async findDnsRecord(zoneId, recordName, recordType = 'CNAME') {
+    const credentials = await this.getApiCredentials();
+    if (!credentials) {
+      throw new Error('缺少有效的 Cloudflare API 令牌');
+    }
+
+    try {
+      const headers = this.createApiHeaders(credentials);
+      const url = `${this.apiBaseUrl}/zones/${zoneId}/dns_records?name=${recordName}&type=${recordType}`;
+
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Cloudflare API 请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(`Cloudflare API 错误: ${data.errors?.map(e => e.message).join(', ') || '未知错误'}`);
+      }
+
+      // 返回找到的第一个匹配记录
+      return data.result && data.result.length > 0 ? data.result[0] : null;
+    } catch (error) {
+      console.error(chalk.red(`查找 DNS 记录失败: ${error.message}`));
+      throw error;
+    }
+  }
+
+  /**
+   * 智能查找 DNS 记录（支持完整域名查询）
+   * @param {string} domain 完整域名
+   * @returns {Promise<Object|null>} DNS 记录对象或 null
+   */
+  async findDnsRecordByDomain(domain) {
+    try {
+      console.log(chalk.gray(`🔍 查找域名 ${domain} 的 DNS 记录...`));
+
+      // 获取 Zone ID
+      const zoneId = await this.getZoneId(domain);
+      if (!zoneId) {
+        console.log(chalk.yellow(`⚠️ 未找到域名 ${domain} 对应的 Cloudflare Zone`));
+        return null;
+      }
+
+      console.log(chalk.gray(`✅ 找到 Zone ID: ${zoneId}`));
+
+      // 查找记录
+      const record = await this.findDnsRecord(zoneId, domain, 'CNAME');
+      
+      if (record) {
+        console.log(chalk.green(`✅ 找到现有 DNS 记录: ${record.type} ${record.name} → ${record.content}`));
+        return {
+          ...record,
+          zoneId // 添加 zoneId 以便后续更新使用
+        };
+      } else {
+        console.log(chalk.gray(`ℹ️ 未找到域名 ${domain} 的 CNAME 记录`));
+        return null;
+      }
+    } catch (error) {
+      console.error(chalk.red(`查找域名 ${domain} 的 DNS 记录失败: ${error.message}`));
+      return null;
+    }
+  }
+
+  /**
+   * 更新现有 DNS 记录
+   * @param {string} zoneId Zone ID
+   * @param {string} recordId DNS 记录 ID
+   * @param {Object} recordData 要更新的记录数据
+   * @returns {Promise<Object|null>} 更新后的记录对象或 null
+   */
+  async updateDnsRecord(zoneId, recordId, recordData) {
+    const credentials = await this.getApiCredentials();
+    if (!credentials) {
+      throw new Error('缺少有效的 Cloudflare API 令牌');
+    }
+
+    try {
+      const headers = this.createApiHeaders(credentials);
+      const url = `${this.apiBaseUrl}/zones/${zoneId}/dns_records/${recordId}`;
+
+      console.log(chalk.gray(`🔄 更新 DNS 记录 ${recordId}...`));
+
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(recordData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Cloudflare API 请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(`Cloudflare API 错误: ${data.errors?.map(e => e.message).join(', ') || '未知错误'}`);
+      }
+
+      console.log(chalk.green(`✅ DNS 记录更新成功: ${data.result.type} ${data.result.name} → ${data.result.content}`));
+      return data.result;
+    } catch (error) {
+      console.error(chalk.red(`更新 DNS 记录失败: ${error.message}`));
+      throw error;
+    }
+  }
+
+  /**
+   * 创建新的 DNS 记录
+   * @param {string} zoneId Zone ID
+   * @param {Object} recordData 记录数据
+   * @returns {Promise<Object|null>} 创建的记录对象或 null
+   */
+  async createDnsRecord(zoneId, recordData) {
+    const credentials = await this.getApiCredentials();
+    if (!credentials) {
+      throw new Error('缺少有效的 Cloudflare API 令牌');
+    }
+
+    try {
+      const headers = this.createApiHeaders(credentials);
+      const url = `${this.apiBaseUrl}/zones/${zoneId}/dns_records`;
+
+      console.log(chalk.gray(`➕ 创建 DNS 记录 ${recordData.name}...`));
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(recordData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Cloudflare API 请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(`Cloudflare API 错误: ${data.errors?.map(e => e.message).join(', ') || '未知错误'}`);
+      }
+
+      console.log(chalk.green(`✅ DNS 记录创建成功: ${data.result.type} ${data.result.name} → ${data.result.content}`));
+      return data.result;
+    } catch (error) {
+      console.error(chalk.red(`创建 DNS 记录失败: ${error.message}`));
+      throw error;
+    }
+  }
+
+  /**
+   * 智能更新或创建 DNS 记录
+   * @param {string} domain 域名
+   * @param {string} content 记录内容（如 CNAME 目标）
+   * @param {Object} options 选项
+   * @returns {Promise<Object>} 操作结果
+   */
+  async upsertDnsRecord(domain, content, options = {}) {
+    try {
+      const {
+        type = 'CNAME',
+        ttl = 300,
+        proxied = false,
+        comment = null
+      } = options;
+
+      console.log(chalk.blue(`🌐 智能管理域名 ${domain} 的 DNS 记录...`));
+
+      // 获取 Zone ID
+      const zoneId = await this.getZoneId(domain);
+      if (!zoneId) {
+        throw new Error(`未找到域名 ${domain} 对应的 Cloudflare Zone`);
+      }
+
+      // 查找现有记录
+      const existingRecord = await this.findDnsRecord(zoneId, domain, type);
+      
+      const recordData = {
+        type,
+        name: domain,
+        content,
+        ttl,
+        proxied
+      };
+
+      if (comment) {
+        recordData.comment = comment;
+      }
+
+      if (existingRecord) {
+        // 记录存在，检查是否需要更新
+        if (existingRecord.content !== content || 
+            existingRecord.proxied !== proxied ||
+            existingRecord.ttl !== ttl) {
+          
+          console.log(chalk.yellow(`🔄 检测到记录内容变化，更新现有记录...`));
+          console.log(chalk.gray(`  旧内容: ${existingRecord.content}`));
+          console.log(chalk.gray(`  新内容: ${content}`));
+          
+          const updatedRecord = await this.updateDnsRecord(zoneId, existingRecord.id, recordData);
+          
+          return {
+            action: 'updated',
+            record: updatedRecord,
+            message: `成功更新 ${type} 记录: ${domain} → ${content}`
+          };
+        } else {
+          console.log(chalk.green(`✨ 记录内容无变化，无需更新`));
+          
+          return {
+            action: 'unchanged',
+            record: existingRecord,
+            message: `${type} 记录已是最新: ${domain} → ${content}`
+          };
+        }
+      } else {
+        // 记录不存在，创建新记录
+        console.log(chalk.blue(`➕ 创建新的 ${type} 记录...`));
+        
+        const newRecord = await this.createDnsRecord(zoneId, recordData);
+        
+        return {
+          action: 'created',
+          record: newRecord,
+          message: `成功创建 ${type} 记录: ${domain} → ${content}`
+        };
+      }
+    } catch (error) {
+      console.error(chalk.red(`DNS 记录管理失败: ${error.message}`));
+      throw error;
+    }
   }
 }

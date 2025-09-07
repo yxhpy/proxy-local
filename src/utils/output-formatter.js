@@ -90,13 +90,31 @@ export class OutputFormatter {
     lines.push(`${this.icons.tip} ${this.colors.info(features.description)}`);
     
     // 模式信息 (如果是 Cloudflare)
-    if (result.provider === 'cloudflare' && provider.authMode !== undefined) {
-      const mode = provider.authMode ? '持久模式' : '临时模式';
-      const modeColor = provider.authMode ? this.colors.success : this.colors.info;
+    if (result.provider === 'cloudflare') {
+      let mode, modeColor;
+      
+      if (provider.namedTunnelConfig) {
+        // 命名隧道模式（自定义域名）
+        mode = '命名隧道模式';
+        modeColor = this.colors.success;
+      } else if (provider.authMode) {
+        // 认证持久模式
+        mode = '持久模式';
+        modeColor = this.colors.success;
+      } else {
+        // 临时模式
+        mode = '临时模式';
+        modeColor = this.colors.info;
+      }
+      
       lines.push(`${this.icons.tunnel} 模式: ${modeColor(mode)}`);
       
       if (provider.customTunnelName) {
         lines.push(`${this.icons.target} 自定义名称: ${this.colors.accent(provider.customTunnelName)}`);
+      }
+      
+      if (provider.namedTunnelConfig && provider.namedTunnelConfig.domain) {
+        lines.push(`${this.icons.target} 自定义域名: ${this.colors.accent(provider.namedTunnelConfig.domain)}`);
       }
     }
     
@@ -262,6 +280,13 @@ export class OutputFormatter {
   formatTitle(title) {
     const separator = this.createSeparator();
     return `${separator}\n${this.colors.highlight.bold(title)}\n${separator}`;
+  }
+
+  /**
+   * 格式化成功消息
+   */
+  formatSuccess(message) {
+    return this.colors.success(`${this.icons.success} ${message}`);
   }
 }
 
