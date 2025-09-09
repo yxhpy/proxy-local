@@ -492,6 +492,59 @@ export class CloudflareDomainManager {
   }
 
   /**
+   * 查询指定域名的所有DNS记录
+   * @param {string} domain 域名
+   * @returns {Promise<Object>} 查询结果
+   */
+  async queryDnsRecords(domain) {
+    try {
+      console.log(chalk.gray(`🔍 查询域名 ${domain} 的所有DNS记录...`));
+
+      // 获取 Zone ID
+      const zoneId = await this.getZoneId(domain);
+      if (!zoneId) {
+        console.log(chalk.yellow(`⚠️ 未找到域名 ${domain} 对应的 Cloudflare Zone`));
+        return { records: [] };
+      }
+
+      const credentials = await this.getApiCredentials();
+      if (!credentials) {
+        throw new Error('缺少有效的 Cloudflare API 令牌');
+      }
+
+      // 查询所有匹配域名的DNS记录
+      const url = `${this.apiBaseUrl}/zones/${zoneId}/dns_records?name=${domain}`;
+      const response = await fetch(url, {
+        headers: this.createApiHeaders(credentials)
+      });
+
+      if (!response.ok) {
+        throw new Error(`DNS记录查询失败: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log(chalk.blue(`✅ 找到 ${data.result.length} 条DNS记录`));
+        
+        // 为每条记录添加zone_id
+        const recordsWithZone = data.result.map(record => ({
+          ...record,
+          zone_id: zoneId
+        }));
+        
+        return { records: recordsWithZone };
+      } else {
+        throw new Error(`DNS记录查询失败: ${data.errors?.[0]?.message || '未知错误'}`);
+      }
+
+    } catch (error) {
+      console.log(chalk.red(`❌ 查询DNS记录失败: ${error.message}`));
+      return { records: [] };
+    }
+  }
+
+  /**
    * 智能查找 DNS 记录（支持完整域名查询）
    * @param {string} domain 完整域名
    * @returns {Promise<Object|null>} DNS 记录对象或 null
@@ -609,6 +662,47 @@ export class CloudflareDomainManager {
       return data.result;
     } catch (error) {
       console.error(chalk.red(`创建 DNS 记录失败: ${error.message}`));
+      throw error;
+    }
+  }
+
+  /**
+   * 删除 DNS 记录
+   * @param {string} zoneId Zone ID
+   * @param {string} recordId DNS 记录 ID
+   * @returns {Promise<boolean>} 删除是否成功
+   */
+  async deleteDnsRecord(zoneId, recordId) {
+    const credentials = await this.getApiCredentials();
+    if (!credentials) {
+      throw new Error('缺少有效的 Cloudflare API 令牌');
+    }
+
+    try {
+      const headers = this.createApiHeaders(credentials);
+      const url = `${this.apiBaseUrl}/zones/${zoneId}/dns_records/${recordId}`;
+
+      console.log(chalk.gray(`🗑️ 删除 DNS 记录 ${recordId}...`));
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Cloudflare API 请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(`Cloudflare API 错误: ${data.errors?.map(e => e.message).join(', ') || '未知错误'}`);
+      }
+
+      console.log(chalk.green(`✅ DNS 记录删除成功`));
+      return true;
+    } catch (error) {
+      console.error(chalk.red(`删除 DNS 记录失败: ${error.message}`));
       throw error;
     }
   }

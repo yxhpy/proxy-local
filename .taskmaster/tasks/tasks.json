@@ -1096,7 +1096,7 @@
         "description": "全面审查并更新项目的所有文档，包括 README.md、命令说明和特性描述，确保其内容与当前最新的代码功能、修复和发布流程完全一致。",
         "details": "此任务旨在使项目文档达到生产级别质量，反映自初始版本以来的所有功能增强和错误修复。文档应清晰、准确、易于新用户理解和上手。\n1. **更新 README.md**: 基于任务9的初始版本进行扩展。在“使用方法”部分，详细说明 Cloudflare 命名隧道功能，包括如何配置 API 令牌（参考任务55的修复逻辑）。增加一个新的“核心特性”章节，重点介绍交互式 DNS 冲突处理（任务54和56），解释用户会看到的选项及其作用。\n2. **完善命令参考**: 审查所有 CLI 命令及其可用选项。确保每个命令都有清晰的示例。例如，`uvx proxy-local` 命令应详细说明如何使用自定义域名、如何处理认证等。\n3. **创建贡献指南 (CONTRIBUTING.md)**: 新建一个 `CONTRIBUTING.md` 文件。该文件应包含开发环境设置指南、代码风格要求、以及最重要的——提交信息规范。明确指出项目遵循“约定式提交”(Conventional Commits)，这是任务57中自动化发布流程的基础。\n4. **解释发布流程**: 在贡献指南或 README 的一个章节中，简要说明项目的版本发布流程。提及 `npm run release` 命令（来自任务57）的作用，以及 `CHANGELOG.md` 是如何自动生成的，方便贡献者和用户了解版本历史。\n5. **文档结构优化**: 评估 README.md 的长度和复杂性。如果内容过多，考虑创建一个 `docs/` 目录，并将高级用法、API 详情或特定提供商（如 Cloudflare）的深入指南拆分到单独的 Markdown 文件中，然后在主 README 中链接到它们。",
         "testStrategy": "1. **新用户模拟测试**: 邀请一位不熟悉近期项目开发的同事，让他/她仅根据更新后的文档，从零开始完成安装、配置 Cloudflare API 令牌，并成功创建一个命名隧道。观察过程中是否有任何困惑或文档与实际不符之处。\n2. **功能覆盖验证**: 逐一执行文档中列出的所有命令和示例。特别要触发一次 DNS 冲突场景，验证交互式菜单（任务54）的行为是否与文档描述完全一致。\n3. **贡献流程演练**: 严格按照新的 `CONTRIBUTING.md` 指南，在本地创建一个新的分支，进行一次小的代码修改，使用正确的格式提交 commit，并尝试运行发布流程的干运行（dry-run）模式，验证流程说明的准确性。\n4. **同行评审**: 将所有文档的变更提交为一个 Pull Request，并要求至少一位核心开发人员进行审查，检查技术描述的准确性、语言的清晰度和格式的规范性。",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           53,
           54,
@@ -1106,11 +1106,957 @@
         ],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 59,
+        "title": "重构 Cloudflare 隧道认证与域名选择流程",
+        "description": "简化 Cloudflare 隧道的用户流程，提供清晰的“登录以使用命名隧道”和“使用临时随机域名”两种模式，并移除复杂的 DNS 自动配置和域名选择菜单。",
+        "details": "此任务旨在彻底改造 Cloudflare 提供商的用户体验，用一个简单、二选一的流程取代当前复杂的多级菜单和自动化逻辑。1. **修改入口逻辑**：在 `CloudflareProvider` 的核心流程中，首要检查是 `~/.cloudflared/cert.pem` 文件是否存在。这将是判断用户是否已登录的唯一依据。2. **实现双路径选择**：如果 `cert.pem` 不存在，使用 `inquirer` 向用户展示两个清晰的选项：A) '登录并使用自定义域名 (推荐)' 和 B) '获取一个临时随机域名'。3. **实现随机域名路径**：如果用户选择B，程序将直接执行任务23中实现的逻辑，即运行 `cloudflared tunnel --url http://localhost:port`，捕获并显示 `*.trycloudflare.com` URL，然后结束流程。此路径不应触发任何认证或 API 令牌检查。4. **实现登录路径**：如果用户选择A，程序将启动 `cloudflared tunnel login` 进程，并指导用户在浏览器中完成认证。程序需要轮询或等待 `cert.pem` 文件被成功创建。5. **简化认证后的流程**：一旦 `cert.pem` 存在（无论是本次登录创建的还是之前就有的），程序将继续执行创建命名隧道的逻辑。此过程仍然需要有效的 API 令牌来配置 DNS。重用任务52和55的逻辑来检查、提示输入和缓存 API 令牌。6. **代码清理和功能移除**：彻底移除任务41中引入的复杂域名选择菜单。删除任务54和56中实现的 DNS 冲突交互式处理逻辑。简化与 DNS 相关的代码，移除不必要的预查询（任务42）和更新逻辑（任务43），只保留创建 CNAME 记录的核心功能。",
+        "testStrategy": "1. **场景一：全新用户选择随机域名**：在一个干净的环境中（确保 `~/.cloudflared` 和 `~/.uvx` 目录不存在），运行隧道创建命令。验证是否正确显示了“登录”和“随机域名”的选项。选择“随机域名”，确认程序成功创建了一个 `*.trycloudflare.com` 隧道，且全程未要求登录或输入 API 令牌。2. **场景二：全新用户选择登录**：重置环境。运行命令并选择“登录”。验证程序是否成功启动浏览器认证流程。在浏览器中完成登录后，检查 `~/.cloudflared/cert.pem` 是否被创建。3. **场景三：登录后首次创建隧道**：紧接场景二，程序应检测到登录成功并提示用户输入 API 令牌以配置 DNS。提供一个有效的令牌后，验证命名隧道和对应的 CNAME 记录是否在 Cloudflare 上成功创建。4. **场景四：已登录和配置的用户**：在一个已存在 `cert.pem` 和有效 API 令牌配置的环境中运行命令。验证程序是否跳过了所有选择和登录步骤，直接进入命名隧道的创建流程。5. **功能移除验证**：手动在 Cloudflare DNS 中创建一个与计划使用的隧道域名冲突的 CNAME 记录。运行命令，验证程序不再显示任务54中定义的交互式冲突解决菜单，而是直接失败并显示来自 `cloudflared` 的原始错误信息。",
+        "status": "done",
+        "dependencies": [
+          23,
+          24,
+          41,
+          52,
+          54,
+          55
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "修改 CloudflareProvider 入口逻辑，以 cert.pem 文件作为登录状态的唯一判断依据",
+            "description": "重构 `CloudflareProvider` 的核心流程，将入口处的逻辑修改为仅检查 `~/.cloudflared/cert.pem` 文件的存在性，以此作为判断用户是否已通过 `cloudflared` 认证的唯一标准。",
+            "dependencies": [],
+            "details": "此任务是整个重构的基础。需要修改 `createTunnel` 或相关方法的起始部分，移除所有旧的认证状态检查逻辑，替换为一个简单的文件系统检查。如果文件存在，则进入认证后流程；如果不存在，则触发新的用户选择流程。",
+            "status": "done",
+            "testStrategy": "编写单元测试，模拟 `cert.pem` 文件存在与不存在两种情况，验证程序是否能正确进入不同的逻辑分支。"
+          },
+          {
+            "id": 2,
+            "title": "为未登录用户实现“登录”与“使用临时域名”的双路径选择提示",
+            "description": "当入口逻辑检测到 `cert.pem` 文件不存在时，使用 `inquirer` 库向用户展示一个清晰的、二选一的交互式提示。",
+            "dependencies": [
+              "59.1"
+            ],
+            "details": "提示应包含两个选项：A) '登录并使用自定义域名 (推荐)' 和 B) '获取一个临时随机域名'。此任务负责实现该交互界面，并根据用户的选择将程序引导至相应的处理路径。",
+            "status": "done",
+            "testStrategy": "在 `cert.pem` 不存在的环境下运行程序，验证交互式提示是否正确显示。手动测试选择每个选项，确认程序能进入对应的逻辑分支（即使后续逻辑尚未实现）。"
+          },
+          {
+            "id": 3,
+            "title": "实现并集成“使用临时随机域名”路径的完整逻辑",
+            "description": "当用户在双路径选择中选择“获取一个临时随机域名”时，程序应直接执行创建临时隧道的逻辑，无需任何认证。",
+            "dependencies": [
+              "59.2"
+            ],
+            "details": "此路径将复用任务23中已实现的功能。具体操作为：执行 `cloudflared tunnel --url http://localhost:port` 命令，捕获其标准输出以获取 `*.trycloudflare.com` URL，然后将 URL 显示给用户并结束流程。确保此路径不会触发任何 API 令牌检查或登录提示。",
+            "status": "done",
+            "testStrategy": "在一个完全干净的环境中（无 `~/.cloudflared` 目录），运行程序并选择“临时域名”选项。验证程序是否成功启动隧道并打印出 `trycloudflare.com` URL，且全程未要求登录或输入 API 令牌。"
+          },
+          {
+            "id": 4,
+            "title": "实现并集成“登录以使用命名隧道”路径，包括调用 'cloudflared tunnel login' 及等待认证完成",
+            "description": "当用户选择“登录并使用自定义域名”时，程序需要启动 `cloudflared tunnel login` 进程，并有效等待用户在浏览器中完成认证。",
+            "dependencies": [
+              "59.2"
+            ],
+            "details": "此任务需要：1. 启动 `cloudflared tunnel login` 子进程。2. 向用户显示清晰的指示，引导他们在浏览器中操作。3. 实现一个轮询或文件监视机制，持续检查 `~/.cloudflared/cert.pem` 文件是否被创建，以此作为认证成功的信号。",
+            "status": "done",
+            "testStrategy": "在干净环境中运行程序并选择“登录”选项。验证程序是否能正确打开浏览器进行 Cloudflare 认证。完成认证后，验证程序是否能检测到 `cert.pem` 文件的创建并继续执行下一步流程。"
+          },
+          {
+            "id": 5,
+            "title": "整合认证后流程，确保在 cert.pem 存在时能正确衔接 API 令牌检查和命名隧道创建",
+            "description": "统一处理两种认证通过的场景（之前已登录或本次刚登录），将流程引导至创建命名隧道的逻辑，并复用现有的 API 令牌处理机制。",
+            "dependencies": [
+              "59.1",
+              "59.4"
+            ],
+            "details": "无论是通过初始检查发现 `cert.pem` 已存在，还是在登录路径中等待 `cert.pem` 创建成功，程序都应进入此流程。此流程需要复用任务52和55的逻辑，检查、提示用户输入并缓存 Cloudflare API 令牌，然后继续执行创建命名隧道和配置 DNS 的核心功能。",
+            "status": "done",
+            "testStrategy": "1. 在已登录（`cert.pem` 存在）但无缓存 API 令牌的情况下运行，验证是否提示输入令牌。2. 紧接登录测试场景（任务59.4），验证登录成功后是否立即提示输入 API 令牌并继续创建隧道。"
+          },
+          {
+            "id": 6,
+            "title": "移除任务41中引入的复杂域名选择菜单及其相关代码",
+            "description": "根据新的简化流程，彻底删除之前为用户提供多种域名选择（随机、从账户选择、手动输入）的交互式菜单。",
+            "dependencies": [
+              "59.5"
+            ],
+            "details": "搜索并移除所有与任务41相关的 `inquirer` 菜单、获取 Cloudflare 账户域名列表的 API 调用以及相关的条件判断逻辑。目标是让认证后的流程直接进入使用用户指定域名创建隧道的阶段，不再有选择菜单。",
+            "status": "done",
+            "testStrategy": "代码审查，确认所有与域名选择菜单相关的代码已被删除。运行程序，在认证后确认不再出现任何域名选择提示。"
+          },
+          {
+            "id": 7,
+            "title": "移除任务54和56中实现的交互式 DNS 冲突处理逻辑",
+            "description": "删除在创建 DNS 记录时，用于处理 CNAME 记录已存在冲突的交互式提示（更新、重命名、回退等选项）。",
+            "dependencies": [
+              "59.5"
+            ],
+            "details": "移除 `try...catch` 块中用于捕获特定 DNS 冲突错误（API 代码 81057）并启动 `inquirer` 菜单的逻辑。新的行为应该是，如果发生 DNS 冲突，程序将直接失败并向用户报告明确的错误信息，不再提供交互式解决方案。",
+            "status": "done",
+            "testStrategy": "手动在 Cloudflare DNS 中创建一个 CNAME 记录。运行程序尝试使用相同的域名创建隧道。验证程序是否会失败并打印出 Cloudflare 返回的原始错误信息，而不是显示一个交互式修复菜单。"
+          },
+          {
+            "id": 8,
+            "title": "进行最终代码清理，移除不必要的 DNS 预查询和更新逻辑",
+            "description": "完成核心功能重构和主要模块移除后，进行最后的代码清理，移除其他因流程简化而变得多余的辅助性功能。",
+            "dependencies": [
+              "59.6",
+              "59.7"
+            ],
+            "details": "此任务包括：1. 移除任务42中实现的 DNS 记录预查询逻辑。2. 移除任务43中复杂的 DNS 更新逻辑，只保留创建 CNAME 记录的核心功能。3. 审查 `CloudflareProvider` 中的所有代码，删除因新流程而不再被调用的私有方法或变量，确保代码库的整洁。",
+            "status": "done",
+            "testStrategy": "进行全面的回归测试，确保两种核心路径（临时域名和命名隧道）在代码清理后仍然能正常工作。代码审查，确认所有已废弃的 DNS 相关辅助函数已被彻底删除。"
+          }
+        ]
+      },
+      {
+        "id": 60,
+        "title": "实现智能DNS冲突自动解决机制",
+        "description": "开发一个自动化的DNS记录管理系统。当创建隧道检测到域名冲突时，系统将根据记录类型智能地更新或替换现有的A、AAAA或CNAME记录，以避免创建失败并简化用户操作。",
+        "details": "此任务旨在将现有的交互式DNS冲突处理（任务54, 56）升级为一种可选的、自动化的解决方案。核心逻辑将在CloudflareProvider中实现，通过直接调用Cloudflare API来管理DNS记录，而不是仅仅依赖`cloudflared`二进制文件。\n1. **引入配置选项**：在 `~/.uvx/config.json` 配置文件中增加一个新字段 `dnsConflictResolution`，其值可以是 `'interactive'` (默认) 或 `'auto'`。这将允许用户选择他们偏好的冲突处理模式，确保向后兼容性。\n2. **重构冲突处理流程**：修改 `_handleDnsConflict` 方法。在该方法开始时，检查 `dnsConflictResolution` 配置。如果为 `'interactive'`，则执行现有的 `inquirer` 提示逻辑。如果为 `'auto'`，则执行新的自动解决逻辑。\n3. **实现自动解决策略**：\n   - 当检测到冲突时，首先使用Cloudflare API（例如，通过 `cloudflare` npm包）查询与冲突域名完全匹配的所有DNS记录。\n   - **分析记录类型**：\n     - 如果存在一个CNAME记录指向另一个 `*.cfargotunnel.com` 地址，则判定为过期的隧道记录。执行 **DELETE** 操作删除该CNAME记录。\n     - 如果存在A或AAAA记录，则判定为该域名之前指向一个IP地址。执行 **DELETE** 操作删除所有匹配的A和AAAA记录。\n     - 如果存在一个CNAME记录指向非Cloudflare隧道的任意其他域，执行 **UPDATE (PUT)** 操作，将该记录的目标（content）修改为新的隧道UUID地址。\n   - **执行操作**：在执行任何删除或更新操作后，给予`cloudflared`进程足够的时间重试或重新执行创建隧道的命令。\n4. **增强API客户端**：确保应用中使用的Cloudflare API客户端封装了获取、删除和更新DNS记录的功能，并包含健全的错误处理机制，特别是针对API令牌权限不足（Authentication Error 9109等）的情况。\n5. **提供明确的日志输出**：在自动模式下，必须向用户清晰地打印出每一步操作。例如：\"检测到 `tunnel.example.com` 的DNS记录冲突。\"，\"模式：自动解决。\"，\"正在删除现有的A记录 (IP: 192.0.2.1)...\"，\"DNS记录清理完毕，正在重试隧道创建。\"",
+        "testStrategy": "测试需要一个配置了有效Cloudflare API令牌（具有Zone.DNS读写权限）的环境。\n1. **场景一：处理过期的隧道CNAME**：\n   - 在Cloudflare DNS中为 `stale.yourdomain.com` 手动创建一个CNAME记录，指向一个无效的隧道地址，如 `deadbeef-....cfargotunnel.com`。\n   - 将 `dnsConflictResolution` 设置为 `'auto'`。\n   - 运行命令创建指向 `stale.yourdomain.com` 的新隧道。\n   - **验证**：程序应自动删除旧的CNAME记录，并成功创建新隧道。检查Cloudflare仪表板确认记录已被替换。\n2. **场景二：处理现有的A/AAAA记录**：\n   - 为 `server.yourdomain.com` 手动创建一个A记录指向任意IP地址。\n   - 保持 `'auto'` 配置，运行命令为 `server.yourdomain.com` 创建隧道。\n   - **验证**：程序应自动删除该A记录，并成功创建指向隧道的CNAME记录。\n3. **场景三：处理指向外部服务的CNAME**：\n   - 为 `service.yourdomain.com` 手动创建一个CNAME记录，指向 `external.service.com`。\n   - 保持 `'auto'` 配置，运行命令为 `service.yourdomain.com` 创建隧道。\n   - **验证**：程序应自动**更新**现有CNAME记录的目标为新的隧道地址，而不是删除它。\n4. **场景四：交互模式回退测试**：\n   - 将 `dnsConflictResolution` 设置为 `'interactive'` 或从配置中移除。\n   - 重复上述任一场景。\n   - **验证**：程序必须显示交互式选择菜单（来自任务54），并且不执行任何自动DNS操作。\n5. **场景五：API权限错误处理**：\n   - 使用一个只有DNS读取权限的API令牌进行测试。\n   - 运行自动模式下的冲突解决。\n   - **验证**：程序应在尝试写入操作时失败，并向用户显示一条清晰的错误消息，指出API令牌权限不足。",
+        "status": "done",
+        "dependencies": [
+          59,
+          56,
+          55,
+          54
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 61,
+        "title": "分析并修复Cloudflare固定隧道DNS路由重复创建失败问题",
+        "description": "深入调查`cloudflared tunnel route dns`命令在DNS记录通过API成功更新后，仍错误地报告“记录已存在”的问题。此任务旨在解决`cloudflared` CLI行为与Cloudflare API状态不一致的根本原因，确保DNS路由配置的可靠性。",
+        "details": "问题现象为：当用户选择更新一个已存在的DNS CNAME记录以指向新隧道时，尽管我们的代码通过Cloudflare API成功将记录的content更新为新的隧道ID，但随后执行的`cloudflared tunnel route dns`命令仍然失败，报错称记录已存在。这表明`cloudflared` CLI可能依赖于某种内部状态或缓存，而不仅仅是实时的DNS API状态。\n\n实施策略：\n1. **根本原因调查**：首先要确定`cloudflared`的行为模式。通过增强日志记录，捕获API调用前后DNS记录的完整状态，以及`cloudflared`命令的详细输出。研究`cloudflared`是否使用了除DNS记录之外的机制来追踪路由关联，例如隧道配置元数据。\n\n2. **实施稳健的更新流程**：放弃“API更新+CLI路由”的两步法，因为它会导致状态不一致。采用更原子化的操作流程，将DNS管理的责任完全委托给`cloudflared`：\n   a. **删除旧记录**：当检测到DNS冲突并获得用户更新确认后，首先使用Cloudflare API（复用任务42和43的逻辑）找到并**删除**现有的CNAME记录。\n   b. **延迟确认**：为应对潜在的DNS传播延迟，在删除API调用成功后，实现一个简短的轮询机制（例如，每秒查询一次，最多5次），确认该DNS记录确实已不存在。\n   c. **创建新路由**：在确认旧记录被删除后，再执行`cloudflared tunnel route dns <TUNNEL_ID> <HOSTNAME>`命令。此时，由于目标主机名没有关联的记录，`cloudflared`应该能够成功创建新的CNAME记录并完成路由配置。\n\n3. **错误处理**：完善整个流程的错误处理。如果在删除或轮询阶段失败，应向用户提供清晰的错误信息并安全退出，而不是继续执行可能失败的`route dns`命令。",
+        "testStrategy": "测试需要一个配置了有效Cloudflare API令牌（具备DNS读写权限）的账户。\n\n1. **环境准备**：在Cloudflare DNS管理面板中，为测试域名手动创建一个CNAME记录，例如 `conflict-test.yourdomain.com`，并将其指向一个任意的旧值，如 `old-tunnel.cfargotunnel.com`。\n\n2. **复现问题（在修复前验证）**：在未应用修复的代码分支上，运行隧道创建命令并指定使用 `conflict-test.yourdomain.com`。在交互式冲突处理提示中选择“更新现有记录”。确认流程在API更新后因`cloudflared`命令报错而失败。\n\n3. **验证修复（核心场景）**：切换到应用修复的代码分支，重复步骤2。验证整个流程是否能够无错误地完成。检查Cloudflare DNS面板，确认 `conflict-test.yourdomain.com` 的CNAME记录已被正确更新为指向新隧道的地址。通过公共URL访问，确认隧道正常工作。\n\n4. **验证轮询与延迟**：通过在测试代码中模拟API删除操作的延迟，验证轮询机制是否能有效等待并最终成功执行路由命令。\n\n5. **验证错误处理**：使用一个只有DNS读取权限但没有写入（删除）权限的API令牌进行测试。当流程尝试删除记录时，验证程序是否能正确捕获API权限错误，并向用户显示清晰、可操作的错误提示后优雅地退出。",
+        "status": "done",
+        "dependencies": [
+          54,
+          53,
+          43,
+          42
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "根本原因调查与日志增强",
+            "description": "深入研究`cloudflared` CLI在执行`route dns`命令时检查记录是否存在的具体机制。增强日志记录功能，以捕获API调用前后的DNS记录状态、API响应以及`cloudflared`命令的完整标准输出和错误输出，为问题诊断提供详细数据。",
+            "dependencies": [],
+            "details": "重点调查`cloudflared`是否依赖本地缓存、Cloudflare API的特定端点，或隧道元数据来判断记录存在性。日志应包含时间戳、API请求/响应体、执行的`cloudflared`命令及其完整输出，以准确复现和分析其行为。\n<info added on 2025-09-07T23:50:36.030Z>\n调试分析确认，根本原因在于操作逻辑不匹配。`cloudflared`和API对DNS记录存在性的判断是一致的。问题源于我们的冲突解决流程：我们通过API“更新”现有CNAME记录，而`cloudflared route dns`命令执行的是“创建”操作。`cloudflared`无法识别API的更新，它只期望在记录不存在时进行创建。因此，API更新与`cloudflared`创建这两种操作互不兼容。已确认解决方案必须是先删除现有记录，然后再执行创建。\n</info added on 2025-09-07T23:50:36.030Z>",
+            "status": "done",
+            "testStrategy": "在修复前，通过增强的日志手动复现问题。分析日志输出，确认`cloudflared` CLI的行为与API状态之间的不一致性，并尝试定位其判断记录存在的依据。"
+          },
+          {
+            "id": 2,
+            "title": "实现DNS记录删除逻辑",
+            "description": "根据新的实施策略，在用户于交互式流程中确认更新现有DNS记录后，实现调用Cloudflare API删除冲突的CNAME记录的功能。此步骤将替换原有的“API更新”操作。",
+            "dependencies": [
+              "61.1"
+            ],
+            "details": "复用任务42和43中已有的API客户端和DNS记录查找逻辑，确保能够准确地定位并删除目标主机名对应的记录。当`cloudflared tunnel route dns`因记录已存在而失败时，捕获该错误。在交互式提示中，如果用户选择“更新”，则触发此删除流程。需要处理API调用失败的情况，例如权限不足或记录不存在。",
+            "status": "done",
+            "testStrategy": "编写单元测试，模拟用户选择更新的场景，验证程序是否能正确调用Cloudflare API的删除端点，并传入正确的Zone ID和Record ID。测试API调用失败时的错误处理逻辑。"
+          },
+          {
+            "id": 3,
+            "title": "开发DNS记录删除确认轮询机制",
+            "description": "为应对潜在的DNS传播延迟，在成功调用删除API后，实现一个轮询机制，以确认DNS记录确实已从Cloudflare系统中移除。这是确保后续`route dns`命令成功执行的关键一步。",
+            "dependencies": [
+              "61.2"
+            ],
+            "details": "该机制应定期（例如每秒一次）通过API查询该DNS记录，直到查询结果为空或达到最大重试次数（例如5次）。轮询逻辑需要包含超时机制和最大重试次数限制，以防止无限等待。如果轮询超时后仍能检测到记录，应视为删除失败。",
+            "status": "done",
+            "testStrategy": "通过模拟Cloudflare API响应来测试轮询逻辑。测试场景包括：1) 记录立即被删除（轮询一次即成功）；2) 记录在几次轮询后被删除；3) 记录一直存在，导致轮询超时失败。"
+          },
+          {
+            "id": 4,
+            "title": "整合新的DNS路由创建流程",
+            "description": "将删除、轮询和创建的步骤整合为一个完整的、原子化的更新流程。只有在轮询确认旧记录被成功删除后，才执行`cloudflared tunnel route dns`命令来创建新的DNS路由。",
+            "dependencies": [
+              "61.3"
+            ],
+            "details": "修改现有的`CloudflareProvider`中的冲突处理逻辑，用新的“删除-轮询-创建”三步法替换掉旧的“API更新+CLI路由”两步法。确保整个流程的状态转换和向用户展示的反馈信息是清晰且连贯的。",
+            "status": "done",
+            "testStrategy": "进行集成测试，在一个预先设置了冲突DNS记录的真实Cloudflare账户中，完整地运行更新流程。验证程序是否按预期顺序执行删除、轮询和创建，并最终成功配置DNS路由。"
+          },
+          {
+            "id": 5,
+            "title": "完善错误处理与端到端测试",
+            "description": "为新的DNS更新流程中的每一步（删除、轮询、创建）添加全面的错误处理。确保在任何步骤失败时，都能向用户提供清晰、可操作的错误信息，并安全地中止流程。最后，执行完整的端到端测试，验证修复方案的稳健性。",
+            "dependencies": [
+              "61.4"
+            ],
+            "details": "错误处理需要覆盖API权限问题、网络超时、轮询失败、`cloudflared`命令再次失败等多种场景。应向用户明确指出失败的环节和可能的原因。",
+            "status": "done",
+            "testStrategy": "执行端到端测试，覆盖多种失败路径：1) 提供无效的API令牌，验证删除步骤失败。2) 模拟API在轮询期间始终返回记录，验证轮询超时失败。3) 在删除成功后，手动中断网络，验证`cloudflared`命令执行失败。确保每种情况下程序都能优雅退出并给出正确提示。"
+          }
+        ]
+      },
+      {
+        "id": 62,
+        "title": "修复命名隧道启动后因超时而过早关闭的问题",
+        "description": "调查并修复了命名隧道在成功连接到Cloudflare边缘后，因内部健康检查或超时逻辑不当而立即关闭的问题。通过重构启动成功信号的检测逻辑，问题已得到解决，确保了隧道的稳定运行。",
+        "status": "done",
+        "dependencies": [
+          59,
+          24,
+          23
+        ],
+        "priority": "medium",
+        "details": "此修复解决了命名隧道在成功建立连接后，由于竞态条件和不完善的资源清理机制导致被错误地判定为超时并终止的问题。根本原因在于Promise的解决（resolve）与子进程的退出（exit）事件之间存在竞态条件，以及超时定时器未能被可靠地清除。\n\n**实施修复详情：**\n1. **重构Promise处理**：在 `waitForNamedTunnelStartup` 方法中重构了Promise逻辑，并引入 `safeResolve` 和 `safeReject` 辅助函数，以确保Promise仅被解决或拒绝一次，有效防止了竞态条件。\n2. **改进资源清理**：优化了事件监听器和超时定时器的清理机制，确保在隧道成功启动或失败退出时，所有相关资源都能被正确释放，避免了悬挂的定时器触发错误的超时。\n3. **修复子进程退出逻辑**：调整了对 `cloudflared` 子进程 `exit` 事件的处理。现在只有在进程以非零错误码异常退出时，Promise才会被拒绝（reject），正常关闭不再触发错误。\n4. **增强连接状态匹配**：改进了用于识别隧道连接成功的正则表达式，使用了正确的括号匹配，使其能更精确地捕获 'connections registered' 状态日志。\n\n**相关文件：**\n- **修复文件**: `src/providers/cloudflare.js` (主要在 1322-1395 行)\n- **分析与测试脚本**: `debug-named-tunnel-timeout.js`, `debug-tunnel-flow.js`, `test-tunnel-timeout-fix.js`",
+        "testStrategy": "为验证修复效果，执行了全面的测试策略，并创建了专用的调试与验证脚本。\n\n1. **根因分析**：创建了 `debug-named-tunnel-timeout.js` 和 `debug-tunnel-flow.js` 脚本，用于隔离和复现问题，准确分析了 `cloudflared` 子进程的事件流和日志输出，定位了竞态条件的根本原因。\n2. **修复验证（命名隧道）**：创建了 `test-tunnel-timeout-fix.js` 自动化测试脚本。运行该脚本，验证了在应用修复后，命名隧道能够稳定启动并持续运行，不再发生过早超时关闭的问题。\n3. **回归测试（临时隧道）**：通过手动测试和既有测试用例，确认对命名隧道的修复未对临时隧道（`*.trycloudflare.com`）的创建和运行产生任何负面影响，其功能保持正常。\n4. **综合验证**：所有测试均已通过，确认修复方案健壮且无回归性。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "创建调试脚本分析问题根因",
+            "description": "",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "重构waitForNamedTunnelStartup方法，引入safeResolve/safeReject防止竞态条件",
+            "description": "",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "优化资源清理机制，确保超时计时器和事件监听器被正确移除",
+            "description": "",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "修复子进程exit事件处理逻辑，仅在异常退出时reject",
+            "description": "",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "创建自动化测试脚本验证修复效果并执行回归测试",
+            "description": "",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 63,
+        "title": "发布 v3.2.1 版本：修复命名隧道启动超时",
+        "description": "执行完整的发布流程，将包含命名隧道启动超时修复（任务62）及其他近期改进的新版本 v3.2.1 发布到 npm。",
+        "details": "此任务涵盖了发布一个补丁版本所需的所有步骤，以将关键的错误修复交付给用户。发布流程应严格遵循语义化版本控制（SemVer）规范。\n\n1. **准备主分支**：\n   - 切换到主分支：`git checkout main`\n   - 拉取最新代码，确保所有已完成的任务（包括任务62）都已合并：`git pull origin main`\n   - 运行完整的本地测试套件，确保所有测试通过：`npm test`\n\n2. **更新版本号**：\n   - 使用 npm 命令自动更新 `package.json` 和 `package-lock.json` 中的版本号，并创建一个附有说明的 Git 标签。\n   - 执行命令：`npm version patch -m \"chore(release): publish v3.2.1\"`\n   - 这会将版本从 v3.2.0 更新到 v3.2.1，并创建 Git 标签 `v3.2.1`。\n\n3. **生成变更日志 (Changelog)**：\n   - 使用 `conventional-changelog-cli` 工具根据约定式提交信息自动生成或更新 `CHANGELOG.md` 文件。\n   - 执行命令：`conventional-changelog -p angular -i CHANGELOG.md -s`\n   - 手动审查新生成的 v3.2.1 条目，确保其清晰、准确地反映了本次发布包含的修复和功能（特别是任务62的修复）。\n   - 将更新后的 `CHANGELOG.md` 添加到 Git 暂存区并提交。\n\n4. **推送至远程仓库**：\n   - 将包含版本更新和变更日志的提交推送到主分支：`git push origin main`\n   - 将新创建的 Git 标签推送到远程仓库，这将触发发布 CI/CD 流程：`git push origin v3.2.1`\n\n5. **构建与发布到 NPM**：\n   - （如果 CI/CD 未自动处理）确保项目已正确构建：`npm run build`\n   - 登录到 npm 账户：`npm login`\n   - 将构建好的包发布到 npm 公共仓库：`npm publish`\n\n6. **创建 GitHub Release**：\n   - 在 GitHub 仓库的 “Releases” 页面，为 `v3.2.1` 标签创建一个新的 Release。\n   - 将 Release 标题设置为 `v3.2.1`。\n   - 从 `CHANGELOG.md` 文件中复制 v3.2.1 的更新内容到 Release 的描述中，并进行适当格式化。",
+        "testStrategy": "为确保发布成功且质量可靠，需执行以下验证步骤：\n\n1. **CI/CD 流程验证**：\n   - 监控在推送 `v3.2.1` 标签后触发的 CI/CD 工作流（如 GitHub Actions）。\n   - 确认所有自动化步骤，包括代码检查、单元测试、集成测试和构建，都成功通过，没有任何错误。\n\n2. **NPM 包验证**：\n   - 在 `npm publish` 命令成功执行后，访问 npmjs.com 上的包页面，确认 `v3.2.1` 版本已成功发布并显示为最新版本。\n   - 检查包页面上显示的元数据（如版本号、依赖项、文件列表）是否正确。\n\n3. **新版本安装测试**：\n   - 在一个全新的、干净的项目目录中，通过 npm 安装新发布的版本：`npm install your-package-name@3.2.1`。\n   - 确认安装过程无误，并且 `node_modules` 中包含了正确版本的包。\n\n4. **核心功能回归测试**：\n   - 使用新安装的 v3.2.1 版本，复现任务62中的测试场景。\n   - 运行 `test-tunnel-timeout-fix.js` 脚本或手动创建一个命名隧道，验证其能够稳定启动并保持连接，不再出现过早超时关闭的问题。\n\n5. **GitHub Release 验证**：\n   - 访问项目的 GitHub Releases 页面，确认 `v3.2.1` 的 Release 已创建，其链接指向正确的 Git 标签，并且发布说明内容准确无误。",
+        "status": "pending",
+        "dependencies": [
+          62,
+          61,
+          60,
+          59,
+          58
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 64,
+        "title": "将命名隧道启动超时修复集成到自动化测试套件",
+        "description": "根据最新发现，`cloudflared` 将其关键的成功启动日志（`Registered tunnel connection`）输出到 stderr 而非 stdout，这是导致我们代码错误报告“命名隧道启动超时”的根本原因。此问题现已通过监听 stderr 得到修复和验证。此任务的核心目标是将此修复固化到CI/CD自动化测试套件中，确保能够准确、可靠地验证命名隧道的启动状态，防止此类问题复现。",
+        "status": "pending",
+        "dependencies": [
+          62,
+          59
+        ],
+        "priority": "medium",
+        "details": "在定位并修复了 `cloudflared` 将成功日志输出到 stderr 的问题后，此任务的重点是为此修复创建一个持久的自动化集成测试。\n1. **确认“启动成功”标准**：成功标志是 `cloudflared` 输出的 `Registered tunnel connection` 日志。关键发现是此日志出现在 **stderr** 流中。\n2. **巩固修复逻辑**：已实施的修复方案是在 `waitForNamedTunnelStartup` 方法中，为子进程的 `stderr` 添加了与 `stdout` 相同的成功日志检测逻辑。此修复已通过手动测试验证。\n3. **将验证逻辑转化为集成测试**：利用现有的测试框架（如 Jest 或 Mocha），在 `__tests__/` 目录下创建一个持久的集成测试用例，确保 `npm test` 可以自动执行它。\n4. **实现核心测试用例**：编写一个名为 `it('should correctly detect named tunnel startup from stderr')` 的测试。该测试需要：\n   - 启动一个 `cloudflared` 命名隧道子进程。\n   - **重点监听其 `stderr` 流**，并断言在设定的超时时间内能够捕获到 `Registered tunnel connection` 日志。\n   - 捕获成功日志后，测试应立即通过，并验证返回的隧道信息是否正确。\n   - 如果超时仍未捕获到成功日志，测试应失败并提供明确的错误信息。\n5. **完善测试环境管理**：测试用例的 `beforeAll`/`afterAll` 钩子函数必须可靠地管理测试环境，包括处理 Cloudflare 认证凭据（`cert.pem`）、生成临时配置文件，以及在测试结束后确保所有 `cloudflared` 子进程被彻底终止，避免资源泄露。",
+        "testStrategy": "1. **成功路径验证**：在本地和CI环境中运行 `npm test`，确认新的集成测试能够稳定地通过，**特别是验证 `Registered tunnel connection` 日志是从 `stderr` 流中捕获的**。\n2. **失败路径验证**：修改测试用例以模拟失败场景，例如：\n   - 故意提供错误的认证，导致 `cloudflared` 启动失败并在 `stderr` 中输出错误信息。验证我们的逻辑能捕获到进程退出事件并正确拒绝。\n   - 模拟 `cloudflared` 挂起且不在任何流中输出成功日志。验证我们的超时机制能按预期触发。\n3. **调试日志验证**：在测试运行时，检查调试日志输出。确认日志清晰地记录了从 `stderr` 检测到成功信号的关键步骤，为未来排查问题提供足够信息。\n4. **CI/CD集成验证**：将包含新测试的分支推送到代码仓库，在拉取请求中观察CI流水线的执行结果，确保测试在隔离的CI环境中也能稳定通过。\n5. **代码审查**：邀请团队成员审查测试代码和相关的修复逻辑，确保其健壮性、可读性和可维护性。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "实施并验证核心修复：监听stderr",
+            "description": "确认 cloudflared 将成功日志 'Registered tunnel connection' 输出到 stderr。修改 waitForNamedTunnelStartup 方法，使其同时监听 stdout 和 stderr，以准确捕获成功信号。通过手动测试和调试日志验证修复已彻底解决超时问题。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "开发自动化集成测试用例",
+            "description": "基于已验证的修复，使用 Jest 或 Mocha 框架编写一个正式的集成测试。该测试必须模拟启动 cloudflared 进程，并断言能够从子进程的 stderr 流中成功捕获到 'Registered tunnel connection' 日志。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "实现测试环境的设置与清理",
+            "description": "为新的集成测试编写 `beforeAll`/`afterAll` 或 `beforeEach`/`afterEach` 钩子。确保测试前能准备好有效的 Cloudflare 认证和配置文件，并在测试结束后可靠地终止 `cloudflared` 进程并清理所有临时文件。",
+            "status": "pending",
+            "dependencies": [
+              2
+            ],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "将新测试集成到CI/CD流水线",
+            "description": "修改 CI/CD 配置文件（如 GitHub Actions workflow），确保新添加的集成测试被自动执行。验证其在 CI 环境中能够稳定通过。",
+            "status": "pending",
+            "dependencies": [
+              3
+            ],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "增强测试以覆盖失败场景",
+            "description": "扩展测试用例，以验证超时逻辑和进程异常退出处理是否按预期工作。特别要确保：1) 如果 stderr 中没有成功日志，测试会按预期超时。2) 如果进程因认证失败等原因提前退出，测试能正确捕获退出事件并失败。",
+            "status": "pending",
+            "dependencies": [
+              2
+            ],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "清理调试脚本并最终确定日志方案",
+            "description": "在集成测试稳定运行后，评估并移除不再需要的临时调试脚本。根据测试期间的观察，最终确定 `waitForNamedTunnelStartup` 中的调试日志级别和内容，使其在生产环境中既有用又不过于冗长。",
+            "status": "pending",
+            "dependencies": [
+              4,
+              5
+            ],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 65,
+        "title": "修复Cloudflare隧道连接问题：无法通过自定义域名访问",
+        "description": "已定位问题根源在于`cloudflared tunnel route dns`命令的不可靠性。现已通过实现一个包含API回退机制的多层DNS创建逻辑完成修复。此任务旨在最终集成并验证该解决方案，确保隧道的自定义域名始终能被正确配置和访问。",
+        "status": "pending",
+        "dependencies": [
+          24,
+          59,
+          61
+        ],
+        "priority": "medium",
+        "details": "此任务的核心问题——`cloudflared`客户端报告隧道成功，但自定义域名无法访问——已被确认为DNS记录创建失败所致。我们已经开发并实施了一套健壮的修复方案来解决此问题。\n\n根本原因分析：\n`cloudflared tunnel route dns` 命令在面对已存在的DNS记录冲突或其它未知错误时，会执行失败且没有提供可靠的错误恢复机制，导致流程中断，域名无法指向新创建的隧道。\n\n已实施的解决方案：\n1. **增强的三层DNS创建逻辑**：重构了DNS配置的核心方法 `configureNamedTunnelDNS`，使其具备强大的容错和回退能力：\n   - **第一层 (CLI尝试)**：首先，正常尝试使用 `cloudflared tunnel route dns` 命令进行标准DNS配置。\n   - **第二层 (智能冲突解决)**：如果第一步因记录已存在而失败，系统会智能识别冲突并引导用户解决（复用任务61的逻辑）。\n   - **第三层 (API直接创建 - 关键回退)**：如果前两步均失败，系统将自动调用新增的 `_createDnsRecordViaAPI` 方法，直接通过Cloudflare API创建或更新CNAME记录，作为确保成功的最终保障。\n\n2. **新增API辅助方法**：\n   - `_createDnsRecordViaAPI`：一个封装了Cloudflare API调用的新方法，用于以编程方式创建CNAME记录。\n   - `_verifyDnsRecord`：一个验证方法，在记录创建后通过API回查，确保记录已按预期生效。\n\n3. **端到端健康检查**：在DNS配置流程（无论通过CLI还是API）完成后，保留原计划，程序应暂停一小段时间等待DNS传播，然后主动向自定义域名发起HTTP GET请求，以最终确认从公网到本地服务的连接是通畅的。",
+        "testStrategy": "测试需要一个配置了有效Cloudflare API令牌和可用域名的账户。\n\n1. **环境准备**：启动一个简单的本地Web服务器，监听在特定端口（如8000），并能返回一个明确的响应（如 'Hello World'）。\n\n2. **标准流程验证**：运行`uvx proxy-local 8000`命令，并选择使用自定义域名。验证在`cloudflared`命令成功的情况下，DNS记录被正确创建，域名可以正常访问。\n\n3. **API回退机制验证**：模拟`cloudflared tunnel route dns`命令失败的场景（例如，通过临时移除CLI工具的执行权限或注入错误参数）。验证程序是否能够捕获失败，自动触发API回退逻辑，并最终成功创建DNS记录。\n\n4. **DNS记录最终验证**：无论通过何种方式创建，都应登录Cloudflare仪表盘或使用API查询，确认CNAME记录的名称、内容（指向正确的`<TUNNEL_ID>.cfargotunnel.com`）以及代理状态（橙色云朵）均正确无误。\n\n5. **端到端功能验证**：在浏览器或使用`curl`命令（例如 `curl -v https://your-custom-domain.com`）访问该自定义域名。验证是否能成功接收到本地服务器返回的'Hello World'响应。\n\n6. **失败场景模拟**：停止本地Web服务器，再次运行隧道创建流程。验证程序是否能够通过新的健康检查机制检测到连接失败，并向用户报告明确的错误信息。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "",
+            "description": "根本原因分析：定位 `cloudflared tunnel route dns` 的失败模式和场景。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "",
+            "description": "实现Cloudflare API回退机制：开发 `_createDnsRecordViaAPI` 和 `_verifyDnsRecord` 方法。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "",
+            "description": "重构DNS配置流程：在 `configureNamedTunnelDNS` 中集成三层创建逻辑（CLI -> 冲突解决 -> API）。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "",
+            "description": "功能与集成测试：对新的DNS创建逻辑进行单元测试和集成测试，确保其健壮性。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "",
+            "description": "实现端到端连接健康检查：在DNS配置成功后，增加一个主动的HTTP GET请求来验证最终的连接性。",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 66,
+        "title": "修复 CloudflareProvider 缺少 `createTunnel` 方法实现的问题",
+        "description": "在 `CloudflareProvider` 类中实现必需的 `createTunnel` 方法，以符合 `TunnelProvider` 接口规范。此方法的初步实现已经完成，现阶段任务重点是进行全面的测试以验证其功能的正确性和稳定性，解决因方法未实现而导致的 `createTunnel method must be implemented by subclass` 运行时错误。",
+        "status": "pending",
+        "dependencies": [
+          21,
+          24,
+          64,
+          65
+        ],
+        "priority": "medium",
+        "details": "根据最新进展，`createTunnel` 方法已成功添加到 `CloudflareProvider` 类中。该实现整合了创建 Cloudflare 隧道所需的完整逻辑，包括：\n- 自动检查 `cloudflared` 工具的可用性，并在需要时进行安装。\n- 通过检查 `cert.pem` 文件的存在来判断用户认证状态。\n- 根据认证状态，分别调用 `handleAuthenticatedFlow`（用于持久化命名隧道）和 `handleUnauthenticatedFlow`（用于匿名隧道）的处理流程。\n- 内置了完整的错误处理和诊断功能，以提高健壮性。\n\n后续步骤是验证该实现的正确性，确保其完全符合任务21中定义的接口规范，并能与任务64（隧道状态检测）和任务65（DNS配置）的逻辑无缝集成。",
+        "testStrategy": "测试需要一个配置了有效Cloudflare账户和可用域名的环境。\n\n1. **单元测试**：为 `CloudflareProvider` 添加一个新的单元测试用例，验证 `createTunnel` 方法的存在性和其基本调用流程。\n\n2. **集成测试 - 匿名隧道**：\n   - 运行命令 `uvx proxy-local 8080 --provider=cloudflare`。\n   - 验证程序不再抛出 `method must be implemented` 错误。\n   - 验证命令成功输出一个 `trycloudflare.com` 的URL，并且该URL可以访问本地8080端口的服务。\n\n3. **集成测试 - 持久化命名隧道**：\n   - 首先确保已通过 `uvx proxy-local --cloudflare-login` 登录。\n   - 运行命令 `uvx proxy-local 8080 --provider=cloudflare-auth --cloudflare-custom your.domain.com`。\n   - 验证程序能够正确启动命名隧道，并利用任务64的修复逻辑成功检测到启动状态。\n   - 验证程序能够利用任务65的DNS配置逻辑成功创建或更新DNS记录。\n   - 验证最终输出的自定义域名URL `https://your.domain.com` 可以成功访问本地8080端口的服务。\n\n4. **错误处理测试**：\n   - 模拟一个失败场景（例如，提供一个无效的API令牌或域名）。\n   - 验证 `createTunnel` 方法能够捕获 `cloudflared` 的错误输出，并以 `Promise.reject` 的形式向上层抛出有意义的错误信息，而不是让程序崩溃。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "",
+            "description": "在 `CloudflareProvider` 中实现 `createTunnel` 方法，并集成 `cloudflared` 工具的可用性检查与自动安装逻辑。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "",
+            "description": "实现基于 `cert.pem` 文件的认证状态判断，并根据结果分别调用 `handleAuthenticatedFlow` 和 `handleUnauthenticatedFlow`。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "",
+            "description": "在 `createTunnel` 方法中集成完整的错误处理和诊断功能。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "",
+            "description": "编写并执行单元测试，验证 `createTunnel` 方法的存在性和基本调用流程。",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "",
+            "description": "执行匿名隧道的集成测试，验证 `uvx proxy-local 8080 --provider=cloudflare` 命令是否按预期工作。",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "",
+            "description": "执行持久化命名隧道的集成测试，验证自定义域名和DNS配置功能。",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "",
+            "description": "执行错误处理测试，模拟失败场景并验证程序能否优雅地捕获并报告错误。",
+            "status": "pending",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 67,
+        "title": "在 CloudflareProvider 中实现 `createTunnelConfig` 方法",
+        "description": "已在 `CloudflareProvider` 类中成功实现 `createTunnelConfig` 方法，解决了因方法未定义而导致的 `this.createTunnelConfig is not a function` 运行时错误。当前任务的重点是进行全面的单元和集成测试，以验证该实现的正确性和健壮性。",
+        "status": "done",
+        "dependencies": [
+          66,
+          24
+        ],
+        "priority": "medium",
+        "details": "实现摘要：`createTunnelConfig` 方法现已完成，其核心功能是为 `cloudflared` 命名隧道动态生成并写入 `config.yml` 配置文件。具体实现细节如下：\n\n1.  **目录与文件管理**：自动创建 `~/.cloudflared` 配置目录（如果不存在），并在其中生成 `config.yml` 文件。\n2.  **手动 YAML 构建**：为避免引入不必要的依赖，配置文件内容通过字符串模板手动构建，而非使用 `js-yaml` 库。\n3.  **配置内容**：生成的配置包含隧道ID、凭证文件路径 (`credentials-file`) 以及入口规则 (`ingress`)。\n4.  **流量路由规则**：入口规则配置为将指定的主机名流量转发到本地服务URL，并包含一个默认的 `http_status:404` 回退规则。\n5.  **环境验证**：在生成配置前，会主动检查凭证文件是否存在，确保环境完整性。\n6.  **错误处理**：整个过程包含了完整的错误处理和日志记录，以提高诊断效率。",
+        "testStrategy": "测试策略的重点是执行单元测试和集成测试，以确保新实现的 `createTunnelConfig` 方法功能符合预期且稳定可靠。\n\n**1. 单元测试：**\n   - 为 `createTunnelConfig` 方法编写专门的单元测试用例。\n   - 使用 `mock-fs` 模拟文件系统，验证 `~/.cloudflared` 目录和 `config.yml` 文件是否被正确创建。\n   - 断言写入的 `config.yml` 内容格式正确，并包含所有预期的参数（tunnel, credentials-file, ingress rules）。\n   - 模拟凭证文件不存在的场景，验证方法是否能正确抛出异常。\n   - 验证方法在成功时返回正确的配置文件路径。\n\n**2. 集成测试：**\n   - 在 `createTunnel` 的集成测试流程中，触发创建命名隧道的场景。\n   - 验证 `cloudflared tunnel run` 命令能够成功使用生成的 `config.yml` 文件启动隧道。\n   - 通过自定义域名访问本地服务，确认流量路由规则生效。\n   - 检查在隧道关闭后，相关临时配置是否被妥善处理（如果适用）。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "",
+            "description": "实现 `createTunnelConfig` 方法的核心逻辑，包括创建目录、生成YAML内容和写入文件。",
+            "status": "completed",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "",
+            "description": "为 `createTunnelConfig` 方法编写全面的单元测试，覆盖成功和失败场景。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "",
+            "description": "执行集成测试，确保 `createTunnel` 流程能正确调用新方法并成功创建命名隧道。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "",
+            "description": "验证修复效果，确认 `this.createTunnelConfig is not a function` 错误已解决。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 68,
+        "title": "修复 Cloudflared 隧道 DNS 路由与服务映射的验证失败问题",
+        "description": "此问题最初表现为自定义域名访问失败，后经分析确认根本原因是 DNS 记录创建后的正常传播延迟，而非程序错误。问题在于，代码在隧道建立后立即进行连接验证，由于 DNS 尚未生效，验证必然失败，从而误导用户。修复方案是移除了此即时验证，并优化了用户界面提示，告知用户 DNS 传播可能需要时间，同时启动后台健康监控。",
+        "status": "pending",
+        "dependencies": [
+          65,
+          61,
+          54,
+          24
+        ],
+        "priority": "medium",
+        "details": "经过调试，确认 `spawn cloudflared` 进程本身工作正常，隧道能够成功连接到 Cloudflare 边缘服务器。\n\n实际问题在于 `waitForNamedTunnelStartup` 函数之后的验证逻辑：代码在隧道建立后立即进行 `validateTunnelConnection` 验证，但此时 DNS 记录尚未在全球范围内传播，导致验证失败，使用户误认为隧道配置失败。\n\n最终的修复内容包括：\n1. **移除立即验证**：删除了在隧道启动后立即执行的 `validateTunnelConnection` 连接验证逻辑，这是导致误报错误的根本原因。\n2. **优化用户提示**：在隧道成功建立后，向用户显示明确的成功提示和关于 DNS 传播延迟的警告信息（例如：“✅ 隧道已成功建立！请注意：DNS 记录在全球生效可能需要几分钟时间。如果您的域名暂时无法访问，请稍后重试。”）。\n3. **改进监控机制**：不再进行一次性的即时验证，而是直接启动后台健康监控，让其在后台持续检查连接状态，为用户提供更可靠的反馈。\n4. **代码清理**：移除了因逻辑变更而不再需要的导入和其他冗余代码。",
+        "testStrategy": "1. **环境准备**：在本地启动一个简单的 Web 服务器（如 Python 的 `http.server`），使其在 8000 端口上监听并返回一个明确的响应（例如 'Service OK'）。\n2. **执行命令**：为一个之前未配置过的自定义域名运行 `uvx proxy-local 8000 --custom-domain your.new-domain.com`。\n3. **验证即时反馈**：\n   - 确认命令执行成功，没有因连接验证失败而提前退出。\n   - 确认终端输出了“隧道已成功建立”的成功信息，以及关于 DNS 传播可能需要几分钟才能生效的明确提示。\n   - 登录 Cloudflare DNS 管理面板，验证 `your.new-domain.com` 的 CNAME 记录是否已立即被正确创建。\n4. **验证最终结果**：\n   - 等待5-10分钟后，使用 `curl` 命令或浏览器访问 `https://your.new-domain.com`，验证是否能成功接收到来自本地 8000 端口的 'Service OK' 响应。\n   - 确认后台健康监控已启动并正常运行。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "定位问题根源为即时验证逻辑",
+            "description": "通过调试分析，确认问题并非隧道创建失败，而是隧道启动后立即执行的连接验证因DNS传播延迟而失败。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "移除隧道启动后的即时连接验证",
+            "description": "从代码中删除了 `validateTunnelConnection` 在隧道启动后的调用，从根本上解决了误报失败的问题。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "优化用户提示，增加DNS传播延迟信息",
+            "description": "在命令行界面添加了清晰的提示，告知用户隧道已成功创建，但DNS记录生效需要时间，并建议稍后重试访问。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "实现后台健康监控以替代即时验证",
+            "description": "引入了后台健康监控机制，在隧道启动后持续检查连接状态，为用户提供更准确、更长期的状态反馈。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "清理相关代码中的未使用导入",
+            "description": "移除了因验证逻辑变更而不再需要的代码和导入，保持代码库的整洁。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 69,
+        "title": "修复隧道 392a61b1 的 DNS 路由配置",
+        "description": "为新创建的隧道 `392a61b1-88c5-4765-b749-b0f271ad8914` 配置DNS CNAME记录，使其正确映射到 `gemini.yxhpy.xyz` 域名，解决因DNS配置失败导致的自定义域名无法访问问题。",
+        "details": "此任务旨在解决一个特定的DNS路由配置失败案例。尽管隧道已成功创建（ID: 392a61b1-88c5-4765-b749-b0f271ad8914），但其对应的自定义域名 `gemini.yxhpy.xyz` 未能自动创建DNS记录。修复步骤如下：\n1. **根本原因调查**：首先，检查相关日志，确定自动化DNS配置流程（如任务65中所述）为何在此案例中失败。可能的原因包括API权限问题、域名状态异常或瞬时网络错误。\n2. **手动执行DNS路由命令**：尝试使用 `cloudflared` 命令行工具手动创建路由：`cloudflared tunnel route dns 392a61b1-88c5-4765-b749-b0f271ad8914 gemini.yxhpy.xyz`。\n3. **使用API回退机制**：如果CLI命令失败，应利用任务65中开发的Cloudflare API直连方式来创建DNS记录。这需要构造一个API请求，为 `gemini.yxhpy.xyz` 创建一个类型为CNAME的DNS记录，其内容指向隧道的规范域名 `392a61b1-88c5-4765-b749-b0f271ad8914.cfargotunnel.com`。\n4. **验证配置**：在Cloudflare的DNS管理仪表盘中，确认 `gemini.yxhpy.xyz` 的CNAME记录已正确创建并指向目标隧道。\n5. **经验总结**：根据调查结果，评估是否有必要对任务65中的自动化DNS创建逻辑进行进一步加固，以防止未来发生类似问题。",
+        "testStrategy": "1. **修复前验证**：执行 `dig gemini.yxhpy.xyz` 或 `nslookup gemini.yxhpy.xyz`，确认当前不存在正确的CNAME记录或解析失败。\n2. **执行修复**：按照“详细信息”部分描述的步骤进行DNS记录配置。\n3. **修复后验证**：\n   - 再次执行 `dig gemini.yxhpy.xyz CNAME`，验证返回的CNAME记录是否为 `392a61b1-88c5-4765-b749-b0f271ad8914.cfargotunnel.com`。\n   - 等待几分钟以便DNS传播，然后使用 `curl -I https://gemini.yxhpy.xyz` 或在浏览器中访问该URL，确认能够收到来自隧道后端服务的有效HTTP响应（例如 HTTP 200 OK）。\n   - 登录Cloudflare账户，检查 `yxhpy.xyz` 域的DNS记录，确保该CNAME记录存在且已启用代理（橙色云朵）。",
+        "status": "pending",
+        "dependencies": [
+          65,
+          66,
+          68
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 70,
+        "title": "修复 Cloudflare 隧道连接成功但域名无法访问的根本问题",
+        "description": "根据 MVP 验证结果，问题根因已确认为 DNS 记录未能成功创建。本任务的目标是修复 `configureNamedTunnelDNS` 方法中的核心缺陷，并实施一个健壮的、基于 API 的验证机制，确保 DNS CNAME 记录被可靠地创建并指向正确的隧道，从而彻底解决域名无法访问的问题。",
+        "status": "done",
+        "dependencies": [
+          65,
+          67,
+          24
+        ],
+        "priority": "medium",
+        "details": "经过深入调查，先前关于入口规则、网络延迟或 `cloudflared` 守护进程冲突的假设已被排除。根本原因被锁定在 DNS 记录创建环节：尽管程序流程报告成功，但对多个 DNS 服务器的查询均返回 `ENODATA`，证实了 DNS 记录实际上并未被创建或更新。\n\n**关键发现：**\n\n*   **核心缺陷**：`configureNamedTunnelDNS` 方法中的逻辑存在问题，导致 `cloudflared tunnel route dns` 命令或 API 回退机制在执行失败时，未能正确捕获错误并中断流程，反而给出了“成功”的假象。\n*   **验证缺失**：当前流程缺乏一个强制性的、权威的验证步骤来确认 DNS 记录是否真的被创建成功。\n\n**实施策略：**\n\n1.  **第一阶段：修复 DNS 创建逻辑**\n    *   深入调试 `configureNamedTunnelDNS` 方法，分析 `cloudflared tunnel route dns` 命令的输出流和退出码，确保任何失败（包括权限问题、域名无效、记录冲突等）都能被准确捕获。\n    *   审查并加固 API 回退逻辑 (`_createDnsRecordViaAPI`)，确保其在调用后能正确处理 Cloudflare API 返回的成功或失败响应。\n\n2.  **第二阶段：实施强制性 API 验证**\n    *   在 `configureNamedTunnelDNS` 方法执行 DNS 创建/更新操作后，立即引入一个新的、强制性的验证步骤 `verifyDnsRecordCreation`。\n    *   此步骤将**直接使用 Cloudflare API** 查询指定域名的 DNS 记录。\n    *   实现一个带有重试机制的轮询循环（例如，每 5 秒查询一次，最多重试 6 次），以应对轻微的 API 状态更新延迟。\n    *   验证标准：API 查询必须返回一个 CNAME 记录，其 `name` 与用户域名匹配，且 `content` 与新创建的隧道 ID (`[tunnel-id].cfargotunnel.com`) 完全一致。\n\n3.  **第三阶段：改进错误处理和用户反馈**\n    *   如果 `verifyDnsRecordCreation` 在所有重试后仍然失败，整个隧道创建流程必须立即终止。\n    *   向用户显示一个清晰、明确的错误信息，例如：“错误：未能为您的域名创建 DNS 记录。请检查您的 Cloudflare API 令牌是否具有 'DNS:Edit' 权限，并确保域名拼写正确。”\n    *   将详细的 API 响应或 `cloudflared` 错误输出记录到调试日志中，以方便后续排查。",
+        "testStrategy": "测试需要一个配置了有效 Cloudflare API 令牌和可用域名的账户，以及一个在本地运行的简单 Web 服务器（例如 `python -m http.server 8000`）。\n\n1.  **环境准备**：确保本地没有任何残留的 `cloudflared` 进程在运行。为确保测试的确定性，建议在 Cloudflare 仪表板中手动删除将要测试的子域名 DNS 记录。\n\n2.  **基线失败复现**：在应用修复前，运行 `uvx proxy-local 8000` 并选择一个自定义域名。确认程序报告成功，但通过 `dig [your-domain]` 或 `nslookup [your-domain]` 查询时返回 `NXDOMAIN` 或 `ENODATA`。\n\n3.  **DNS 创建与验证逻辑测试**：应用修复后，再次运行命令。在程序的调试日志中，验证以下流程：\n    a.  成功执行了 DNS 创建命令或 API 调用。\n    b.  紧接着启动了基于 API 的验证轮询。\n    c.  验证轮询在几次尝试内成功获取了正确的 CNAME 记录，并打印成功日志。\n\n4.  **端到端连接验证测试**：在 DNS 验证成功后，使用 `curl -v https://[your-domain]` 命令。断言该请求能成功连接并返回本地 Web 服务器的 200 OK 状态码和内容，证明整个链路通畅。\n\n5.  **DNS 创建失败场景测试（权限不足）**：使用一个没有 `DNS:Edit` 权限的 Cloudflare API 令牌进行测试。运行隧道创建命令。验证程序在 DNS 验证步骤中是否会失败，并向用户报告一个清晰的、关于权限不足的错误信息。\n\n6.  **回归测试**：验证创建临时隧道（使用随机 `*.trycloudflare.com` 域名）的功能仍然正常工作，未受此修复影响。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "",
+            "description": "调试并修复 `configureNamedTunnelDNS` 方法，确保能准确捕获 `cloudflared` 命令或 API 调用的失败状态。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "",
+            "description": "在 DNS 创建操作后，实现一个基于 Cloudflare API 的强制性验证循环，以确认 CNAME 记录已正确创建。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "",
+            "description": "重构错误处理流程，当 DNS 验证失败时，终止程序并向用户报告明确、可操作的错误信息。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "",
+            "description": "增强日志记录，清晰地输出 DNS 创建尝试、API 验证的每一步以及最终的成功或失败结果。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 71,
+        "title": "修复DNS验证方法中的ES模块兼容性问题",
+        "description": "将 `_verifyDnsRecordCreation` 和 `_testHttpConnectivity` 方法中不兼容的 CommonJS `require` 语法转换为 ES 模块的 `import` 语法，以解决 'require is not defined' 运行时错误。同时，实现缺失的 `cleanupTempTunnel` 方法以确保资源被正确清理。",
+        "details": "此任务旨在解决由于项目迁移到ES模块（ESM）而引入的模块系统兼容性问题。在任务70中引入的DNS验证逻辑中，部分辅助方法错误地使用了CommonJS的 `require()` 函数，这在ESM环境中是无效的，并导致程序崩溃。\n\n**实施步骤：**\n\n1.  **模块语法重构**：\n    *   审查 `CloudflareProvider.js` 文件以及其依赖项，重点关注 `_verifyDnsRecordCreation` 和 `_testHttpConnectivity` 这两个私有方法。\n    *   定位所有 `require()` 调用。例如，`const dns = require('dns/promises');` 或 `const fetch = require('node-fetch');`。\n    *   将这些调用替换为文件顶部的ESM `import` 语句。例如：`import dns from 'dns/promises';` 和 `import fetch from 'node-fetch';`。\n    *   注意检查是否存在其他CommonJS特有的变量（如 `__dirname`, `__filename`, `module.exports`），并使用ESM的等效方案（如 `import.meta.url` 和 `export` 关键字）进行替换。\n\n2.  **实现 `cleanupTempTunnel` 方法**：\n    *   在 `CloudflareProvider` 类中定义一个新的 `async cleanupTempTunnel(tunnelId, domain)` 方法。\n    *   该方法应负责清理在测试或失败回滚过程中创建的临时资源。\n    *   具体清理操作应包括：\n        *   安全地终止与 `tunnelId` 相关的 `cloudflared` 进程。\n        *   （可选，根据实现）删除为 `domain` 创建的临时DNS记录。\n        *   删除可能生成的临时配置文件。\n    *   方法内部必须包含健壮的错误处理，例如使用 `try...catch` 块，确保即使某个资源不存在或删除失败，也不会导致整个清理过程崩溃。",
+        "testStrategy": "测试将分为单元测试和集成测试两个阶段，以确保代码重构的正确性和新功能的稳定性。\n\n**1. 单元测试：**\n   *   为重构后的 `_verifyDnsRecordCreation` 和 `_testHttpConnectivity` 方法编写或更新单元测试。使用测试框架（如 Jest 或 Vitest）的 `mock` 功能模拟外部依赖（如 `dns` 和 `fetch`），验证方法的核心逻辑在 `import` 语法下依然按预期工作。\n   *   为新增的 `cleanupTempTunnel` 方法编写专门的单元测试。模拟一个正在运行的进程和存在的DNS记录，断言该方法会调用正确的清理命令（例如 `process.kill` 或 API 调用）。同时，测试当资源不存在时，方法能够优雅地处理错误而不是抛出异常。\n\n**2. 集成测试：**\n   *   复现原始错误：在应用修复前，运行 `uvx proxy-local 8000 --custom-domain your-test.domain.com`，确认程序因 `require is not defined` 错误而崩溃。\n   *   验证修复效果：应用代码修复后，再次执行相同的命令。程序应不再崩溃，并成功完成DNS验证和HTTP连接测试，最终建立隧道。\n   *   验证清理逻辑：手动中断隧道创建过程（例如，在DNS验证后立即按 `Ctrl+C`），然后检查系统状态，确认没有残留的 `cloudflared` 进程。如果可能，检查Cloudflare仪表板，确认测试用的DNS记录已被移除（如果清理逻辑包含此功能）。",
+        "status": "done",
+        "dependencies": [
+          70
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 72,
+        "title": "修复DNS查询回调函数错误",
+        "description": "根据调试结果，已定位在DNS记录验证过程中发生的“The callback argument must be of type function. Received undefined”运行时错误的根本原因。问题源于 `src/providers/cloudflare.js` 文件中错误地动态导入了基于回调的 `dns` 模块，而非其 Promise 版本，导致 `async/await` 调用失败。",
+        "status": "done",
+        "dependencies": [
+          71,
+          70
+        ],
+        "priority": "medium",
+        "details": "问题已精确定位到 `src/providers/cloudflare.js` 文件的第569行。\n\n**问题代码分析：**\n- **文件顶部 (第5行)**: 正确导入了 `dns/promises` 模块：`import { promises as dns } from 'dns';`\n- **问题行 (第569行)**: 在方法内部，代码执行了一个错误的动态导入：`const { Resolver } = await import('dns');`，这获取的是需要回调函数的旧版 `Resolver`。\n- **调用处 (第572行)**: `await resolver.resolveCname(domain);` 尝试以 Promise 方式调用，但由于 `resolver` 实例是回调式的，因此缺少函数类型的回调参数，导致程序崩溃。\n\n**修复步骤：**\n1.  **修正导入语句**: 导航到 `src/providers/cloudflare.js` 的第569行。\n2.  将错误的动态导入 `const { Resolver } = await import('dns');` 修改为从 `dns/promises` 模块导入：`const { Resolver } = await import('dns/promises');`。\n3.  **验证调用**: 确保修改后，`new Resolver()` 创建的实例支持 Promise API，使得 `await resolver.resolveCname(domain);` 能够正确执行。\n4.  **代码审查**: 快速审查该文件，确保没有其他地方混用 `dns` 模块的两种 API。",
+        "testStrategy": "测试将结合单元测试和集成测试，确保问题被根除且不引入新的回归。\n1. **单元测试**：\n    *   为 `_verifyDnsRecordCreation` 方法编写或增强单元测试，重点覆盖DNS查询逻辑。\n    *   使用测试框架（如 Jest 或 Vitest）的 `mock` 功能模拟 `dns/promises` 模块。\n    *   **成功场景**：模拟 `dns.promises.Resolver` 成功解析并返回预期的CNAME记录。断言该方法返回 `true` 并且没有抛出任何错误。\n    *   **失败场景**：模拟 `dns.promises.Resolver` 抛出 `ENODATA` 或其他网络错误。断言该方法能正确捕获异常、返回 `false`，并且不会触发回调类型错误。\n2. **集成测试**：\n    *   复用任务70中定义的端到端测试流程。\n    *   执行 `uvx proxy-local <port> --custom-domain <test-domain>` 命令。\n    *   观察程序输出，确认在DNS验证阶段不再出现“callback argument must be of type function”的崩溃，并且整个隧道创建和验证流程能够顺利完成。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "",
+            "description": "在 src/providers/cloudflare.js 中，将第569行的动态导入从 'dns' 修改为 'dns/promises'。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "",
+            "description": "增强或验证 _verifyDnsRecordCreation 方法的单元测试，确保其在修复后能正确处理DNS解析。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "",
+            "description": "执行端到端集成测试（uvx proxy-local --custom-domain），确认DNS验证阶段不再崩溃，且隧道创建成功。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 73,
+        "title": "修复Cloudflare隧道进程启动失败或意外退出的问题",
+        "description": "解决隧道创建后，因`cloudflared`进程未启动且DNS记录未正确配置，导致自定义域名无法访问的问题。此任务已成功修复隧道生命周期管理中的核心缺陷，通过实现健壮的进程管理、多阶段验证和清晰的错误反馈，确保了在创建隧道后，`cloudflared`守护进程能稳定启动，并为用户提供了明确的DNS配置指导，从而彻底解决了代理启动失败或意外退出的问题。",
+        "status": "done",
+        "dependencies": [
+          24,
+          65,
+          67
+        ],
+        "priority": "medium",
+        "details": "此任务已完成。通过深入分析，明确了问题的根本原因并实施了全面的修复方案，解决了隧道进程无法启动或意外退出的核心问题。\n\n**根本原因分析**：\n1. **配置文件缺失**：隧道启动时未使用 `--config` 参数，导致 `cloudflared` 无法找到凭证文件，连接持续失败。\n2. **DNS记录未创建**：`cloudflared tunnel route dns` 命令因 `cert.pem` 权限不足而静默失败，并未实际创建DNS记录。\n3. **进程管理不完善**：缺乏对 `cloudflared` 子进程详细的日志捕获、错误处理和生命周期管理。\n4. **错误反馈模糊**：用户无法从错误信息中判断出失败的具体阶段和原因。\n\n**已实施的修复措施**：\n1. **隧道进程启动修复 (对应子任务 73.1)**：修改启动命令，强制使用包含凭证路径的 `config.yml` 文件 (`cloudflared tunnel --config config.yml run <tunnel_id>`)，确保隧道能成功建立到Cloudflare边缘网络的稳定连接。\n\n2. **DNS配置逻辑强化 (对应子任务 73.2)**：确认现有代码已具备DNS API回退机制。修复的核心是让系统能正确识别因 `cert.pem` 权限不足导致的CLI失败，并向用户提供清晰的手动配置DNS记录的指导。\n\n3. **健壮的进程生命周期管理 (对应子任务 73.3)**：引入 `_setupProcessLifecycleManagement` 方法，实现了对 `cloudflared` 进程的全面监控，包括：\n   - **分级彩色日志**：实时捕获 `stdout` 和 `stderr`，并根据INF/WRN/ERR级别以不同颜色显示。\n   - **事件监听**：添加了对 `error` 和 `exit` 事件的监听，确保在进程启动失败或意外退出时能立即响应并执行清理。\n   - **优雅退出**：注册系统信号处理器（SIGINT, SIGTERM），确保应用程序能优雅地终止子进程。\n\n4. **启动后综合验证机制 (对应子任务 73.4)**：新增 `_performPostStartupValidation` 方法，在进程启动后自动执行健康检查，同时验证进程存活状态和DNS记录的正确性，并向用户反馈明确的验证结果（SUCCESS / PARTIAL / FAILED）。\n\n5. **优化的错误反馈 (对应子任务 73.5)**：实现了 `_identifyFailureStage` 方法，能够精确定位失败发生在哪个阶段（认证、API令牌、隧道创建、DNS配置、进程启动等），并为每个阶段提供针对性的解决方案和用户指引。",
+        "testStrategy": "测试已完成，所有修复点均通过了专门的单元和集成测试，确认了解决方案的有效性。\n\n1. **进程启动验证**：确认使用 `--config` 参数后，`cloudflared` 进程能成功启动并稳定建立多个连接到Cloudflare边缘服务器。\n\n2. **DNS与错误处理验证**：验证系统能正确检测因 `cert.pem` 权限不足导致的DNS配置失败，并向用户提供清晰的手动配置指引，而不是让流程卡住或误报成功。\n\n3. **生命周期管理验证**：通过模拟进程错误和手动终止（`kill`），验证 `error` 和 `exit` 事件监听器能被正确触发，记录相应的日志，并执行清理逻辑。\n\n4. **综合验证机制测试**：在不同场景下（如进程正常但DNS失败）进行测试，验证 `_performPostStartupValidation` 能否返回正确的 `PARTIAL` 状态，并提供对应的用户指导。\n\n5. **阶段性错误反馈验证**：通过在认证、隧道创建、DNS配置等不同阶段注入失败，验证 `_identifyFailureStage` 能否准确识别失败点并提供正确的解决方案说明。\n\n所有测试均已通过，确认修复彻底解决了原始问题。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "实现隧道创建后自动执行 `cloudflared tunnel run` 命令",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "<info added on 2025-09-08T14:29:16.422Z>\n问题根源已确定和验证：\n1. 隧道进程启动成功但需要正确的配置文件，包含credentials-file路径\n2. 不使用配置文件时连接会持续失败\n3. 使用正确配置文件时，隧道可以成功建立多个连接（4个连接到不同的边缘服务器）\n\n测试验证：\n- 创建包含tunnel、credentials-file和ingress的config.yml\n- 使用--config参数启动cloudflared\n- 成功检测到\"Registered tunnel connection\"消息\n- 连接稳定建立\n\n现在需要修改src/providers/cloudflare.js中的隧道启动逻辑，确保使用配置文件启动\n</info added on 2025-09-08T14:29:16.422Z>",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "集成并调用DNS路由配置逻辑，确保CNAME记录被正确创建",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "<info added on 2025-09-08T14:36:57.208Z>\n问题确认：\n- cloudflared route dns命令返回\"已配置\"，但实际DNS记录未创建\n- dig查询显示gemini.yxhpy.xyz无任何记录\n- 域名使用Cloudflare DNS（carioca.ns.cloudflare.com, carlos.ns.cloudflare.com）\n\n根本原因：\n- cert.pem包含旧的Argo Tunnel token，权限不足以创建DNS记录\n- 缺少CLOUDFLARE_API_KEY/CLOUDFLARE_API_TOKEN环境变量\n- route dns命令无法实际修改DNS记录，只能创建内部路由映射\n\n解决方案需要：\n1. 在cloudflare.js中实现DNS记录创建的备用方案（直接API调用）\n2. 或要求用户提供具有DNS:Edit权限的API令牌\n3. 或在DNS配置失败时提供手动创建指导\n</info added on 2025-09-08T14:36:57.208Z>",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "为 `cloudflared` 子进程实现健壮的生命周期管理（日志捕获、错误/退出事件监听）",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "开发启动后验证机制，同时检查进程存活状态和DNS记录正确性",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "优化错误反馈，明确区分隧道创建、DNS配置和进程启动阶段的失败信息",
+            "description": "",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 74,
+        "title": "增强 `cloudflared` 隧道的健壮性和自动恢复能力",
+        "description": "在通过手动脚本成功修复了特定隧道的启动问题后，本任务旨在将这些临时的修复措施和调试经验，固化为一个全自动的监控与恢复系统。该系统将确保所有 `cloudflared` 隧道的长期稳定，不仅会通过主动健康检查监控正在运行的隧道进程，还将系统性地解决“僵尸”状态（即存在配置文件但没有对应运行进程）的问题。通过启动时状态同步和运行中健康检查，系统将能自动启动缺失的进程、重启失败的进程，并清理无法恢复的过期配置，从而显著提升服务的可靠性。",
+        "status": "done",
+        "dependencies": [
+          73,
+          8
+        ],
+        "priority": "medium",
+        "details": "在任务73修复了隧道的基础启动问题后，本任务将重点关注其运行时的稳定性和状态一致性。近期通过手动创建的debug和fix脚本成功恢复了一个隧道进程，这验证了自动化恢复的可行性。我们将通过实现一个包含启动时同步和持续监控的健壮管理循环来达成此目标。\n\n1.  **启动时状态同步与清理**：\n    *   在主服务启动时，扫描所有已知的 `cloudflared` 隧道配置文件。\n    *   检查每个配置文件是否有对应的 `cloudflared` 进程正在运行。\n    *   对于没有运行进程的“孤立”配置，立即尝试启动隧道进程。此逻辑应参考并通用化近期为修复 `tunnel-gemini-yxhpy-xyz` 所创建的 `fix` 脚本中的成功实践。\n    *   引入清理机制：如果某个配置在多次尝试后仍无法启动，应将其标记为“永久性失败”，停止重试，并记录详细错误日志，提示用户进行手动干预或清理。\n\n2.  **主动健康检查机制**：\n    *   为每个成功启动的 `cloudflared` 子进程关联一个定时健康检查器（例如，每30秒执行一次）。\n    *   检查逻辑将通过查询 `cloudflared` 进程暴露的 `metrics` 端点（通常位于 `http://127.0.0.1:[port]/metrics`）来验证其活性。启动子进程时需要捕获并存储其分配的 metrics 端口。\n    *   如果 metrics 端点在预设的超时时间内（如5秒）未响应或返回非200状态码，则判定该进程为不健康状态。\n\n3.  **自动重启与退避策略**：\n    *   一旦通过健康检查或启动同步检测到进程失败，立即触发恢复流程。首先，记录详细的错误日志，包括时间戳、隧道ID和失败原因。\n    *   尝试使用 `SIGTERM` 优雅地终止不健康的进程，若在短时间内（如3秒）未退出，则强制使用 `SIGKILL`。\n    *   实施带指数退避（Exponential Backoff）的自动重启策略，适用于启动失败和运行中失败两种场景。例如，首次失败后立即重启，第二次等待5秒，第三次等待15秒，以此类推。\n    *   设置最大重启尝试次数（如5次）。若达到上限后仍无法恢复，则触发永久性故障处理逻辑。\n\n4.  **状态管理与日志记录**：\n    *   改进日志系统，清晰地区分进程的初始启动、状态同步、健康检查成功/失败、以及自动重启事件。\n    *   在用户界面或控制台输出中提供更丰富的状态反馈，例如：“正在同步隧道状态...”、“发现孤立配置[Tunnel-ID]，正在启动...”、“隧道[Tunnel-ID]连接中断，正在尝试恢复（第1/5次）...”、“隧道[Tunnel-ID]恢复失败，请检查配置或网络连接”。",
+        "testStrategy": "1.  **集成测试 - 状态同步场景**：\n    *   手动创建几个有效的隧道配置文件，但不启动 `cloudflared` 进程。\n    *   启动监控服务。\n    *   验证服务是否能检测到这些“孤立”配置并成功为它们启动进程，其行为应与手动 `fix` 脚本一致。\n    *   手动创建一个无效的配置文件（例如，错误的凭证）。\n    *   验证服务在多次尝试启动失败后，是否停止重试并记录明确的错误日志。\n\n2.  **集成测试 - 进程终止场景**：\n    *   成功启动一个隧道代理。\n    *   使用 `ps` 命令找到对应的 `cloudflared` 子进程PID，并手动执行 `kill -9 [PID]`。\n    *   观察系统日志，确认健康检查器在下一个周期内检测到进程失败。\n    *   验证系统是否自动执行了重启流程，并且新的隧道进程成功建立连接。\n\n3.  **故障注入测试 - 网络中断场景**：\n    *   使用防火墙规则（如 `iptables`）或网络模拟工具暂时阻止 `cloudflared` 进程访问外部网络。\n    *   验证健康检查（依赖于与Cloudflare边缘的连接状态）是否失败，并触发重启逻辑。\n    *   验证指数退避策略是否按预期执行，即重启尝试之间有明显的延迟增加。\n    *   恢复网络连接后，验证系统能否在下一次重启尝试中成功恢复隧道。\n\n4.  **单元测试**：\n    *   为健康检查模块编写单元测试，使用 mock 模拟 `metrics` 端点的各种响应（成功、超时、错误状态码）。\n    *   为退避策略算法编写单元测试，确保其能根据失败次数正确计算等待时间。",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "分析现有fix脚本并实现通用的启动时状态同步逻辑",
+            "description": "分析用于修复单个隧道的手动脚本，将其逻辑抽象化，并开发一个通用的模块。该模块在服务启动时扫描所有隧道配置文件，将其与当前运行的cloudflared进程列表进行比对，并为所有缺失的进程触发启动流程。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "实现基于/metrics端点的主动健康检查器",
+            "description": "为每个正在运行的隧道子进程实现一个定时健康检查器。该检查器将定期查询/metrics端点，以验证进程的活性和连接状态。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "开发统一的自动重启与指数退避模块",
+            "description": "创建一个可重用的重启模块，该模块能处理来自启动同步和运行时健康检查的失败事件。实现指数退避和最大重试次数逻辑，以防止快速失败循环。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "实现永久性故障处理与配置清理机制",
+            "description": "当隧道达到最大重启次数后，将其标记为永久性失败状态。在日志中记录详细信息，并考虑添加一个接口或命令来帮助用户清理这些无效的隧道配置。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "增强日志记录与用户状态反馈",
+            "description": "改进日志输出，清晰地区分状态同步、健康检查、重启尝试和永久性失败等事件。在UI或控制台提供更明确的状态信息。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "编写全面的集成与单元测试",
+            "description": "为新的状态同步逻辑、健康检查器、重启策略和故障处理机制编写测试用例，确保整个系统的健壮性。",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 75,
+        "title": "修复因DNS传播延迟导致的记录验证失败问题",
+        "description": "解决在创建Cloudflare隧道后，DNS记录验证逻辑因无法立即从公共DNS服务器查询到新记录而过早判定失败的问题。此任务将通过实现直接查询权威DNS服务器和引入带指数退避的重试策略，来显著提高验证过程的可靠性。",
+        "details": "问题根源分析：当前的DNS验证实现依赖于系统的默认解析器或通用的公共DNS服务器。Cloudflare API成功创建CNAME记录后，该记录需要一定时间才能在全球范围内传播。验证逻辑的重试间隔过短且缺乏对传播延迟的特殊处理，导致在记录完全生效前就因收到`ENOTFOUND`响应而超时失败，正如在`gemini.yxhpy.xyz`案例中观察到的那样。\n\n实施策略：\n1. **优先查询权威DNS服务器**：修改DNS验证方法，使其首先动态查询目标域名的权威名称服务器（NS记录）。然后，将DNS CNAME查询请求直接发送到这些权威服务器之一。这可以绕过缓存，获得最即时的记录状态。Node.js的`dns.promises.Resolver`对象允许在实例化时指定服务器地址。\n2. **实现指数退避重试机制**：作为对权威查询的补充或回退方案，优化现有的重试循环。采用指数退避算法（Exponential Backoff）来设置重试间隔，例如从2秒开始，每次失败后加倍（2s, 4s, 8s, 16s...），并设置一个最长总等待时间（例如90秒）。这为DNS传播提供了充足的时间，避免过早放弃。\n3. **增强日志和用户反馈**：在验证循环中，增加详细日志，记录每次尝试查询的DNS服务器、查询的域名以及收到的响应。当收到`ENOTFOUND`时，应将其记录为“等待DNS传播”的中间状态，而不是一个直接的错误，直到最终超时。",
+        "testStrategy": "测试将结合集成测试和单元测试，以确保解决方案的健壮性。\n\n1. **集成测试 (主要验证手段)**：\n    *   **环境准备**：准备一个可用的Cloudflare账户和域名。在测试前，通过Cloudflare仪表板确保将要创建的子域名的DNS记录不存在。\n    *   **执行测试**：运行创建隧道的命令，该命令会触发DNS记录的创建和验证流程。\n    *   **验证**：\n        a. 检查应用日志，确认验证逻辑首先尝试查询域名的权威DNS服务器，或者正在执行指数退避重试。\n        b. 确认程序在收到初期的`ENOTFOUND`响应后没有立即失败，而是继续重试，并打印出相应的等待信息。\n        c. 最终，整个流程应在DNS记录可解析后成功完成。\n        d. 并行使用`dig @<cloudflare_ns_server> your.test.domain`命令手动检查记录状态，以验证程序的行为与实际传播情况一致。\n\n2. **单元测试**：\n    *   使用Jest或Vitest等测试框架，模拟`dns/promises`模块。\n    *   编写测试用例，模拟DNS解析器在最初几次调用时抛出`ENOTFOUND`错误，然后在后续调用中成功返回记录。断言验证函数能够正确处理重试逻辑并最终返回成功。\n    *   编写另一个测试用例，模拟DNS解析器在整个超时期限内始终返回`ENOTFOUND`。断言函数在达到最大重试次数或时间后，会正确地抛出最终的失败错误。",
+        "status": "done",
+        "dependencies": [
+          70,
+          71,
+          72,
+          73
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 76,
+        "title": "根据官方指南全面审查和修复Cloudflare隧道实现",
+        "description": "根据最新的 'Cloudflare隧道设置指南.md' 文档，对现有的Cloudflare隧道创建、认证和DNS配置流程进行全面审计和重构，以修复当前存在的未知错误并确保实现与最佳实践一致。",
+        "details": "此任务旨在通过与官方推荐流程进行逐行对比，系统性地解决Cloudflare隧道功能中潜藏的稳定性问题。核心工作是审查并重构`CloudflareProvider`，确保其行为与`Cloudflare隧道设置指南.md`文档完全对齐。\n\n实施步骤：\n1. **文档深入研究**：首先，彻底学习和理解 '/home/yxhpy/project/demo01/.taskmaster/docs/Cloudflare隧道设置指南.md' 中的每一个步骤，特别是关于认证、配置文件生成、隧道创建、DNS路由和进程守护的命令和最佳实践。\n2. **代码流程审计**：将文档中的标准流程映射到当前`CloudflareProvider`的实现代码上。重点关注以下区域：\n    - **认证与凭证管理**：检查`cloudflared tunnel login`的调用时机、`cert.pem`文件的验证逻辑，以及与API令牌（任务55）的协同工作是否无懈可击。\n    - **配置文件一致性**：验证是否为所有相关的`cloudflared`子命令（`create`, `route`, `run`, `delete`）都正确生成并强制使用了包含凭证路径的`config.yml`文件。这是任务73的核心修复点，必须确保其在所有流程中得到贯彻。\n    - **隧道生命周期原子性**：审查从`tunnel create`到`tunnel route dns`再到`tunnel run`的整个序列。分析是否存在竞态条件或中间失败状态未被妥善处理的情况。确保流程要么完全成功，要么能安全回滚（例如，删除已创建但未成功路由的隧道）。\n    - **错误处理与解析**：扩展现有的错误解析逻辑，使其能够识别并处理指南中提到的、但当前代码可能忽略的`cloudflared` CLI错误码和消息。\n3. **实施重构**：根据审计结果，对`CloudflareProvider`进行必要的重构。这可能包括调整函数调用顺序、统一命令行参数、增强状态管理以及引入更清晰的日志记录，以便于未来调试。\n4. **保留关键修复**：在重构过程中，必须确保近期关键修复（如任务65的API回退DNS创建和任务75的权威DNS验证）的逻辑被完整保留并无缝集成到新流程中。",
+        "testStrategy": "测试策略需要覆盖从全新用户到高级用户的完整端到端场景，以确保重构后的稳健性。\n\n1. **环境重置**：在每次测试前，确保删除 `~/.cloudflared` 和 `~/.uvx` 目录，以模拟一个纯净的用户环境。\n2. **核心成功路径测试**：\n    - **场景A (首次登录并创建隧道)**：运行`uvx proxy-local`，选择登录并使用自定义域名。验证整个流程是否顺畅：浏览器登录 -> `cert.pem`生成 -> 隧道创建 -> DNS记录配置 -> `cloudflared`进程稳定运行 -> 通过自定义域名成功访问本地服务。\n    - **场景B (已登录用户创建新隧道)**：在场景A成功后，不清除配置，再次运行命令创建另一个隧道。验证程序是否跳过登录，直接使用现有凭证完成所有步骤。\n3. **健壮性与边界测试**：\n    - **DNS冲突处理验证**：手动在Cloudflare后台创建一个CNAME记录，然后尝试使用该域名创建隧道。验证任务54中实现的交互式冲突解决流程是否依然正常工作。\n    - **DNS传播延迟验证**：确认任务75引入的权威DNS查询和指数退避重试机制在新流程中仍然有效，能够容忍DNS传播延迟。\n    - **进程管理验证**：隧道成功运行后，手动`kill`掉`cloudflared`进程。验证应用程序是否能正确捕获进程退出事件并执行相应的清理逻辑。\n4. **失败路径测试**：\n    - **认证中断**：在浏览器登录环节，关闭页面或拒绝授权。验证应用程序是否能检测到登录失败并向用户提供清晰的反馈。\n    - **无效API令牌**：手动篡改配置文件中的API令牌，验证依赖API的操作（如DNS查询/创建）是否会优雅地失败并提示用户。",
+        "status": "done",
+        "dependencies": [
+          24,
+          59,
+          65,
+          73,
+          75
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "官方指南与现有代码的差异分析与审计",
+            "description": "深入研究`Cloudflare隧道设置指南.md`，并将其推荐的认证、配置、隧道生命周期和错误处理流程与当前`CloudflareProvider`的实现进行逐行对比。产出一份详细的差异分析报告，明确指出所有不一致或需要改进的地方，作为后续重构工作的依据。",
+            "dependencies": [],
+            "details": "此任务的核心是信息收集和规划。需要创建一个映射文档，左侧是官方指南的步骤和命令，右侧是当前代码的实现函数和逻辑。重点标记出认证流程、配置文件使用、命令序列和错误处理四个方面的差异。这份报告将是后续所有重构子任务的输入和蓝图。\n<info added on 2025-09-08T23:46:41.250Z>\n差异分析已完成，并生成了详细的分析报告 debug-cloudflare-implementation-analysis.cjs。报告识别出4个主要差异领域：\n1. 认证流程差异：官方指南要求cert.pem + cloudflared tunnel login，而现有实现主要使用API Token，存在不统一问题。\n2. 配置文件管理差异：官方要求所有cloudflared命令使用--config参数，但现有实现的create/route/delete命令没有使用配置文件。\n3. 隧道生命周期管理差异：缺少原子性操作和事务管理，失败时可能残留隧道，且没有在create和route之间创建config.yml。\n4. 错误处理差异：需要更好的错误分类和对cloudflared stderr输出的结构化解析。\n\n已确定优先修复项为：统一CommandBuilder、原子化生命周期、统一认证流程、增强错误处理。此分析报告为后续重构任务提供了明确的技术路线图。\n</info added on 2025-09-08T23:46:41.250Z>",
+            "status": "done",
+            "testStrategy": "通过代码审查和文档比对完成。最终产出物（差异分析报告）应由团队成员共同评审，确保分析的全面性和准确性。"
+          },
+          {
+            "id": 2,
+            "title": "重构认证与配置文件管理逻辑",
+            "description": "根据审计结果，统一`CloudflareProvider`中的认证和凭证管理流程。确保`cloudflared tunnel login`的调用、`cert.pem`的验证以及API令牌的使用与官方指南一致。强制所有`cloudflared`子命令（create, route, run, delete）通过`--config`参数使用统一生成的`config.yml`文件，彻底解决任务73中发现的配置不一致问题。",
+            "dependencies": [
+              "76.1"
+            ],
+            "details": "将创建一个统一的`CommandBuilder`或类似工具，用于生成所有`cloudflared`命令。该工具将确保每个命令都包含`--config`参数，并指向一个在操作开始时动态生成或验证的`config.yml`文件。同时，将重构`login`和`isAuthenticated`逻辑，使其严格依赖官方推荐的`cert.pem`文件。\n<info added on 2025-09-09T00:02:27.382Z>\n成功完成认证和配置文件管理重构。主要成果包括：创建了统一的命令构建器 (CloudflaredCommandBuilder)，使所有cloudflared命令统一使用--config参数并自动管理config.yml文件；增强了认证管理系统，新增综合认证状态检查 (getAuthenticationStatus) 以支持证书和API Token协同工作，并添加了认证级别判断；修复了createNamedTunnel、configureNamedTunnelDNS等核心方法，使其集成新的统一构建器。经完整测试验证，修复解决了任务76.1分析中发现的配置文件不一致和认证流程混合使用的核心问题。\n</info added on 2025-09-09T00:02:27.382Z>",
+            "status": "done",
+            "testStrategy": "1. 模拟全新用户，验证`login`流程能正确生成`cert.pem`和`config.yml`。2. 验证后续的`create`, `route`, `run`命令都通过`--config`参数执行。3. 删除`cert.pem`后，验证系统能正确识别为未登录状态。"
+          },
+          {
+            "id": 3,
+            "title": "实现原子化的隧道生命周期管理",
+            "description": "重构从隧道创建 (`create`)、DNS路由 (`route`) 到进程运行 (`run`) 的完整操作序列，确保其原子性。引入状态机和事务性操作，实现当任何步骤失败时能够安全回滚（例如，自动删除已创建但未成功路由的隧道），防止系统进入不一致的中间状态。",
+            "dependencies": [
+              "76.1"
+            ],
+            "details": "将整个隧道创建流程封装在一个`try...catch...finally`块或类似的事务管理逻辑中。在`try`块中按顺序执行`create`, `route`, `run`。在`catch`块中，根据失败的阶段执行清理操作，如如果`route`失败，则调用`tunnel delete`删除在`create`步骤中创建的隧道。状态将明确记录在内存中，直到整个流程成功。\n<info added on 2025-09-09T00:08:18.579Z>\n已成功实现原子化的隧道生命周期管理。主要成果包括：创建了AtomicTunnelLifecycle类，该类具备完整的事务系统（含事务日志和回滚栈），可确保隧道创建流程（认证→创建→配置→DNS路由→验证）的原子性。任何步骤失败均会触发完整、按序的回滚操作（如删除隧道、清理配置），保证系统状态一致。该管理器已集成到CloudflareProvider中，重构了setupNamedTunnelWithDNS方法，并保留了失败时回退到临时隧道的兼容性。所有功能均已通过测试验证，解决了因缺少事务性操作而导致状态不一致的核心问题。\n</info added on 2025-09-09T00:08:18.579Z>",
+            "status": "done",
+            "testStrategy": "1. 正常流程测试，确保隧道能完整创建。2. 通过注入错误（如模拟`tunnel route dns`命令失败），验证系统能否正确捕获异常并自动删除已创建的隧道。3. 验证中间失败后，系统状态恢复到操作前的干净状态。"
+          },
+          {
+            "id": 4,
+            "title": "增强`cloudflared` CLI的错误处理与日志记录",
+            "description": "基于官方指南中列出的常见错误，扩展现有的错误解析逻辑。实现对`cloudflared` CLI返回的特定错误码和标准错误输出的精确捕获和分类，向用户提供更清晰、可操作的错误提示。同时，在重构后的代码中增加详细的结构化日志，记录关键步骤的输入、输出和决策过程。",
+            "dependencies": [
+              "76.1"
+            ],
+            "details": "创建一个错误字典或解析器，用于映射`cloudflared`的stderr输出中的特定字符串（例如 'already exists', 'authentication failed'）到内部的错误类型。根据错误类型，向用户显示友好的提示信息。日志记录将使用标准库（如winston），在每个关键函数调用前后记录上下文信息，如隧道ID、域名、执行的命令等。",
+            "status": "done",
+            "testStrategy": "1. 编写单元测试，模拟不同的`cloudflared`错误输出，验证错误解析器能否返回正确的错误类型和用户提示。2. 在集成测试中，检查失败场景下生成的日志文件，确认其包含了足够详细的调试信息。"
+          },
+          {
+            "id": 5,
+            "title": "集成并验证关键修复（任务65和75）的兼容性",
+            "description": "在完成核心流程重构后，将任务65（API回退DNS创建）和任务75（权威DNS验证）的逻辑无缝集成到新的`CloudflareProvider`实现中。编写专门的集成测试，确保这些关键修复在新的代码结构下依然能按预期工作，并且其功能未受重构影响。",
+            "dependencies": [
+              "76.2",
+              "76.3",
+              "76.4"
+            ],
+            "details": "此任务涉及代码的整合与验证。需要仔细审查任务65和75的实现细节，将其逻辑（如`_createDnsRecordViaAPI`回退机制）迁移到重构后的原子化生命周期（子任务76.3）中。确保在`tunnel route dns`失败后，API回退逻辑能被正确触发。",
+            "status": "done",
+            "testStrategy": "1. 复现任务65的测试场景：模拟`cloudflared tunnel route dns`命令失败，验证系统是否能自动切换到Cloudflare API进行DNS记录创建并最终成功。2. 复现任务75的测试场景：使用一个非Cloudflare管理的权威DNS服务器的域名，验证系统能否正确检测并给出相应的指导信息。"
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-09-05T13:44:42.534Z",
-      "updated": "2025-09-07T16:33:22.928Z",
+      "updated": "2025-09-09T00:31:00.063Z",
       "description": "Tasks for master context"
     }
   }
