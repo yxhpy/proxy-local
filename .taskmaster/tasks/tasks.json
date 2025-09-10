@@ -589,7 +589,7 @@
           21,
           22
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -1367,7 +1367,7 @@
         "description": "执行完整的发布流程，将包含命名隧道启动超时修复（任务62）及其他近期改进的新版本 v3.2.1 发布到 npm。",
         "details": "此任务涵盖了发布一个补丁版本所需的所有步骤，以将关键的错误修复交付给用户。发布流程应严格遵循语义化版本控制（SemVer）规范。\n\n1. **准备主分支**：\n   - 切换到主分支：`git checkout main`\n   - 拉取最新代码，确保所有已完成的任务（包括任务62）都已合并：`git pull origin main`\n   - 运行完整的本地测试套件，确保所有测试通过：`npm test`\n\n2. **更新版本号**：\n   - 使用 npm 命令自动更新 `package.json` 和 `package-lock.json` 中的版本号，并创建一个附有说明的 Git 标签。\n   - 执行命令：`npm version patch -m \"chore(release): publish v3.2.1\"`\n   - 这会将版本从 v3.2.0 更新到 v3.2.1，并创建 Git 标签 `v3.2.1`。\n\n3. **生成变更日志 (Changelog)**：\n   - 使用 `conventional-changelog-cli` 工具根据约定式提交信息自动生成或更新 `CHANGELOG.md` 文件。\n   - 执行命令：`conventional-changelog -p angular -i CHANGELOG.md -s`\n   - 手动审查新生成的 v3.2.1 条目，确保其清晰、准确地反映了本次发布包含的修复和功能（特别是任务62的修复）。\n   - 将更新后的 `CHANGELOG.md` 添加到 Git 暂存区并提交。\n\n4. **推送至远程仓库**：\n   - 将包含版本更新和变更日志的提交推送到主分支：`git push origin main`\n   - 将新创建的 Git 标签推送到远程仓库，这将触发发布 CI/CD 流程：`git push origin v3.2.1`\n\n5. **构建与发布到 NPM**：\n   - （如果 CI/CD 未自动处理）确保项目已正确构建：`npm run build`\n   - 登录到 npm 账户：`npm login`\n   - 将构建好的包发布到 npm 公共仓库：`npm publish`\n\n6. **创建 GitHub Release**：\n   - 在 GitHub 仓库的 “Releases” 页面，为 `v3.2.1` 标签创建一个新的 Release。\n   - 将 Release 标题设置为 `v3.2.1`。\n   - 从 `CHANGELOG.md` 文件中复制 v3.2.1 的更新内容到 Release 的描述中，并进行适当格式化。",
         "testStrategy": "为确保发布成功且质量可靠，需执行以下验证步骤：\n\n1. **CI/CD 流程验证**：\n   - 监控在推送 `v3.2.1` 标签后触发的 CI/CD 工作流（如 GitHub Actions）。\n   - 确认所有自动化步骤，包括代码检查、单元测试、集成测试和构建，都成功通过，没有任何错误。\n\n2. **NPM 包验证**：\n   - 在 `npm publish` 命令成功执行后，访问 npmjs.com 上的包页面，确认 `v3.2.1` 版本已成功发布并显示为最新版本。\n   - 检查包页面上显示的元数据（如版本号、依赖项、文件列表）是否正确。\n\n3. **新版本安装测试**：\n   - 在一个全新的、干净的项目目录中，通过 npm 安装新发布的版本：`npm install your-package-name@3.2.1`。\n   - 确认安装过程无误，并且 `node_modules` 中包含了正确版本的包。\n\n4. **核心功能回归测试**：\n   - 使用新安装的 v3.2.1 版本，复现任务62中的测试场景。\n   - 运行 `test-tunnel-timeout-fix.js` 脚本或手动创建一个命名隧道，验证其能够稳定启动并保持连接，不再出现过早超时关闭的问题。\n\n5. **GitHub Release 验证**：\n   - 访问项目的 GitHub Releases 页面，确认 `v3.2.1` 的 Release 已创建，其链接指向正确的 Git 标签，并且发布说明内容准确无误。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           62,
           61,
@@ -1382,7 +1382,7 @@
         "id": 64,
         "title": "将命名隧道启动超时修复集成到自动化测试套件",
         "description": "根据最新发现，`cloudflared` 将其关键的成功启动日志（`Registered tunnel connection`）输出到 stderr 而非 stdout，这是导致我们代码错误报告“命名隧道启动超时”的根本原因。此问题现已通过监听 stderr 得到修复和验证。此任务的核心目标是将此修复固化到CI/CD自动化测试套件中，确保能够准确、可靠地验证命名隧道的启动状态，防止此类问题复现。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           62,
           59
@@ -1404,7 +1404,7 @@
             "id": 2,
             "title": "开发自动化集成测试用例",
             "description": "基于已验证的修复，使用 Jest 或 Mocha 框架编写一个正式的集成测试。该测试必须模拟启动 cloudflared 进程，并断言能够从子进程的 stderr 流中成功捕获到 'Registered tunnel connection' 日志。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               1
             ],
@@ -1415,7 +1415,7 @@
             "id": 3,
             "title": "实现测试环境的设置与清理",
             "description": "为新的集成测试编写 `beforeAll`/`afterAll` 或 `beforeEach`/`afterEach` 钩子。确保测试前能准备好有效的 Cloudflare 认证和配置文件，并在测试结束后可靠地终止 `cloudflared` 进程并清理所有临时文件。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               2
             ],
@@ -1426,7 +1426,7 @@
             "id": 4,
             "title": "将新测试集成到CI/CD流水线",
             "description": "修改 CI/CD 配置文件（如 GitHub Actions workflow），确保新添加的集成测试被自动执行。验证其在 CI 环境中能够稳定通过。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               3
             ],
@@ -1437,7 +1437,7 @@
             "id": 5,
             "title": "增强测试以覆盖失败场景",
             "description": "扩展测试用例，以验证超时逻辑和进程异常退出处理是否按预期工作。特别要确保：1) 如果 stderr 中没有成功日志，测试会按预期超时。2) 如果进程因认证失败等原因提前退出，测试能正确捕获退出事件并失败。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               2
             ],
@@ -1448,7 +1448,7 @@
             "id": 6,
             "title": "清理调试脚本并最终确定日志方案",
             "description": "在集成测试稳定运行后，评估并移除不再需要的临时调试脚本。根据测试期间的观察，最终确定 `waitForNamedTunnelStartup` 中的调试日志级别和内容，使其在生产环境中既有用又不过于冗长。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               4,
               5
@@ -1462,7 +1462,7 @@
         "id": 65,
         "title": "修复Cloudflare隧道连接问题：无法通过自定义域名访问",
         "description": "已定位问题根源在于`cloudflared tunnel route dns`命令的不可靠性。现已通过实现一个包含API回退机制的多层DNS创建逻辑完成修复。此任务旨在最终集成并验证该解决方案，确保隧道的自定义域名始终能被正确配置和访问。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           24,
           59,
@@ -1512,7 +1512,7 @@
             "id": 5,
             "title": "",
             "description": "实现端到端连接健康检查：在DNS配置成功后，增加一个主动的HTTP GET请求来验证最终的连接性。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -1523,7 +1523,7 @@
         "id": 66,
         "title": "修复 CloudflareProvider 缺少 `createTunnel` 方法实现的问题",
         "description": "在 `CloudflareProvider` 类中实现必需的 `createTunnel` 方法，以符合 `TunnelProvider` 接口规范。此方法的初步实现已经完成，现阶段任务重点是进行全面的测试以验证其功能的正确性和稳定性，解决因方法未实现而导致的 `createTunnel method must be implemented by subclass` 运行时错误。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           21,
           24,
@@ -1565,7 +1565,7 @@
             "id": 4,
             "title": "",
             "description": "编写并执行单元测试，验证 `createTunnel` 方法的存在性和基本调用流程。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -1574,7 +1574,7 @@
             "id": 5,
             "title": "",
             "description": "执行匿名隧道的集成测试，验证 `uvx proxy-local 8080 --provider=cloudflare` 命令是否按预期工作。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -1583,7 +1583,7 @@
             "id": 6,
             "title": "",
             "description": "执行持久化命名隧道的集成测试，验证自定义域名和DNS配置功能。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -1592,7 +1592,7 @@
             "id": 7,
             "title": "",
             "description": "执行错误处理测试，模拟失败场景并验证程序能否优雅地捕获并报告错误。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "details": "",
             "testStrategy": ""
@@ -1654,7 +1654,7 @@
         "id": 68,
         "title": "修复 Cloudflared 隧道 DNS 路由与服务映射的验证失败问题",
         "description": "此问题最初表现为自定义域名访问失败，后经分析确认根本原因是 DNS 记录创建后的正常传播延迟，而非程序错误。问题在于，代码在隧道建立后立即进行连接验证，由于 DNS 尚未生效，验证必然失败，从而误导用户。修复方案是移除了此即时验证，并优化了用户界面提示，告知用户 DNS 传播可能需要时间，同时启动后台健康监控。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           65,
           61,
@@ -1718,7 +1718,7 @@
         "description": "为新创建的隧道 `392a61b1-88c5-4765-b749-b0f271ad8914` 配置DNS CNAME记录，使其正确映射到 `gemini.yxhpy.xyz` 域名，解决因DNS配置失败导致的自定义域名无法访问问题。",
         "details": "此任务旨在解决一个特定的DNS路由配置失败案例。尽管隧道已成功创建（ID: 392a61b1-88c5-4765-b749-b0f271ad8914），但其对应的自定义域名 `gemini.yxhpy.xyz` 未能自动创建DNS记录。修复步骤如下：\n1. **根本原因调查**：首先，检查相关日志，确定自动化DNS配置流程（如任务65中所述）为何在此案例中失败。可能的原因包括API权限问题、域名状态异常或瞬时网络错误。\n2. **手动执行DNS路由命令**：尝试使用 `cloudflared` 命令行工具手动创建路由：`cloudflared tunnel route dns 392a61b1-88c5-4765-b749-b0f271ad8914 gemini.yxhpy.xyz`。\n3. **使用API回退机制**：如果CLI命令失败，应利用任务65中开发的Cloudflare API直连方式来创建DNS记录。这需要构造一个API请求，为 `gemini.yxhpy.xyz` 创建一个类型为CNAME的DNS记录，其内容指向隧道的规范域名 `392a61b1-88c5-4765-b749-b0f271ad8914.cfargotunnel.com`。\n4. **验证配置**：在Cloudflare的DNS管理仪表盘中，确认 `gemini.yxhpy.xyz` 的CNAME记录已正确创建并指向目标隧道。\n5. **经验总结**：根据调查结果，评估是否有必要对任务65中的自动化DNS创建逻辑进行进一步加固，以防止未来发生类似问题。",
         "testStrategy": "1. **修复前验证**：执行 `dig gemini.yxhpy.xyz` 或 `nslookup gemini.yxhpy.xyz`，确认当前不存在正确的CNAME记录或解析失败。\n2. **执行修复**：按照“详细信息”部分描述的步骤进行DNS记录配置。\n3. **修复后验证**：\n   - 再次执行 `dig gemini.yxhpy.xyz CNAME`，验证返回的CNAME记录是否为 `392a61b1-88c5-4765-b749-b0f271ad8914.cfargotunnel.com`。\n   - 等待几分钟以便DNS传播，然后使用 `curl -I https://gemini.yxhpy.xyz` 或在浏览器中访问该URL，确认能够收到来自隧道后端服务的有效HTTP响应（例如 HTTP 200 OK）。\n   - 登录Cloudflare账户，检查 `yxhpy.xyz` 域的DNS记录，确保该CNAME记录存在且已启用代理（橙色云朵）。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           65,
           66,
@@ -2052,11 +2052,87 @@
             "testStrategy": "1. 复现任务65的测试场景：模拟`cloudflared tunnel route dns`命令失败，验证系统是否能自动切换到Cloudflare API进行DNS记录创建并最终成功。2. 复现任务75的测试场景：使用一个非Cloudflare管理的权威DNS服务器的域名，验证系统能否正确检测并给出相应的指导信息。"
           }
         ]
+      },
+      {
+        "id": 77,
+        "title": "开发全新Cloudflare CLI V2一键代理功能",
+        "description": "基于官方最佳实践，重写Cloudflare代理功能，实现从认证、隧道创建到DNS配置的真正一键式自动化流程。此任务将替换现有实现（cloudflare_v_1.js），提供更稳定、更流畅的用户体验。",
+        "details": "此任务旨在彻底重构Cloudflare代理功能，创建一个全新的、模块化的实现（V2版本），以解决当前版本体验不佳的问题。新实现将严格遵循`.taskmaster/docs/Cloudflare隧道设置指南.md`，并整合过去多个修复任务中的成功经验。实现的核心将围绕以下六个组件展开：\n\n1.  **ConfigManager (配置管理器)**：\n    *   负责安全地存储和管理用户凭证，包括`cert.pem`认证文件和API令牌。\n    *   实现智能加载机制，在启动时自动检测并验证现有凭证，避免不必要的重复登录（借鉴任务55的经验）。\n    *   提供统一的配置接口，供其他模块调用。\n\n2.  **TunnelLifecycle (隧道生命周期管理器)**：\n    *   管理`cloudflared`进程的完整生命周期：创建、运行、监控和清理。\n    *   采用任务73中验证过的健壮进程启动策略，例如强制使用`--config`参数指定配置文件，确保隧道连接的稳定性。\n    *   实现可靠的进程监控和自动重启机制，以应对意外退出的情况。\n\n3.  **DNSManager (DNS管理器)**：\n    *   自动化处理DNS CNAME记录的创建和更新，这是实现“一键式”体验的关键。\n    *   实施任务65中设计的强大的三层DNS创建逻辑：首先尝试CLI命令，失败后智能处理冲突（借鉴任务54的交互逻辑），最后回退到直接使用Cloudflare API进行创建，确保DNS配置的最高成功率。\n\n4.  **ErrorHandler (智能错误处理器)**：\n    *   构建一个上下文感知的错误处理系统，能够精确识别失败的阶段（如登录失败、隧道创建失败、DNS配置失败）。\n    *   为用户提供清晰、可操作的错误信息和恢复建议，而不是模糊的CLI输出。\n\n5.  **UserGuidance (交互式用户引导)**：\n    *   将官方的5步流程简化为`uvx proxy-local <port>`一个命令。\n    *   设计一个极简的交互流程，仅在必要时（如首次登录、处理DNS冲突）才提示用户，流程设计参考任务59的简化思路。\n\n6.  **ValidationEngine (多层验证引擎)**：\n    *   在流程开始前执行预检（Pre-flight Check），如检查`cloudflared`是否已安装并可用。\n    *   在DNS记录创建后，采用任务75中实现的先进验证策略：优先查询权威DNS服务器并结合指数退避重试机制，以应对DNS传播延迟，确保验证的准确性。",
+        "testStrategy": "测试必须覆盖从全新用户到高级用户的完整端到端场景，以确保重构后的稳健性。\n\n1.  **环境准备**：\n    *   在每次核心测试前，通过删除`~/.cloudflared`和`~/.uvx`目录来模拟一个纯净的用户环境。\n    *   准备一个有效的Cloudflare账户，并配置好API令牌和可用域名。\n\n2.  **场景一：首次用户完整流程测试**：\n    *   在纯净环境中运行`uvx proxy-local 8000 --provider=cloudflare-v2`。\n    *   验证系统是否正确引导用户完成浏览器登录，并成功生成`cert.pem`。\n    *   验证隧道是否被成功创建，并且DNS CNAME记录是否被自动配置到指定的子域名上。\n    *   验证`cloudflared`进程是否稳定运行，并且可以通过自定义域名成功访问本地8000端口的服务。\n\n3.  **场景二：已登录用户流程测试**：\n    *   在已成功登录的环境中（`cert.pem`存在），再次运行命令。\n    *   验证系统是否跳过登录步骤，直接进行隧道创建和DNS配置，体现`ConfigManager`的智能加载能力。\n\n4.  **场景三：DNS冲突与恢复测试**：\n    *   在Cloudflare后台为目标子域名手动创建一个CNAME记录。\n    *   运行命令并使用该子域名，验证`DNSManager`是否能检测到冲突，并提供交互式选项（如更新、重命名）。\n    *   选择“更新”，验证现有记录是否被成功更新指向新隧道。\n\n5.  **场景四：错误处理与健壮性测试**：\n    *   模拟`cloudflared`未安装的场景，验证`ValidationEngine`的预检功能是否能给出清晰提示。\n    *   在隧道运行后，手动`kill`掉`cloudflared`进程，验证`TunnelLifecycle`是否能检测到并尝试恢复。\n    *   提供一个无效的API令牌，验证`ErrorHandler`能否在API调用阶段捕获错误并给出正确指引。\n\n6.  **场景五：DNS传播延迟验证**：\n    *   在测试日志中，确认DNS验证逻辑在首次查询失败后，是否启动了指数退避重试或查询了权威DNS服务器，而不是立即报错失败。",
+        "status": "done",
+        "dependencies": [
+          24,
+          59,
+          65,
+          73,
+          75,
+          76
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "实现V2配置管理器与环境预检",
+            "description": "构建`ConfigManager`模块，负责安全地存储和加载`cert.pem`及API令牌。同时集成`ValidationEngine`的预检功能，在流程开始前验证`cloudflared`的安装状态，为后续操作奠定基础。",
+            "dependencies": [],
+            "details": "此任务将创建V2功能的核心基础。首先，实现一个`ConfigManager`类，用于管理`~/.uvx/cloudflare_v2/`目录下的配置文件。其次，借鉴任务55的经验，实现智能凭证加载机制，自动检测并验证现有`cert.pem`，避免用户重复登录。最后，实现`ValidationEngine`的预检部分：在执行任何操作前，检查`cloudflared`命令是否存在于系统PATH中，若不存在则提供清晰的安装指引后退出。\n<info added on 2025-09-09T13:39:33.848Z>\n完成的功能模块包括V2配置管理器 (ConfigManager) 和环境预检功能 (ValidationEngine)。ConfigManager实现了独立的V2配置目录 (~/.uvx/cloudflare_v2/)、智能凭证加载与验证、API令牌和cert.pem文件管理、安全的配置文件存储（600权限）、隧道信息记录及首选域名配置持久化。ValidationEngine实现了系统兼容性检查、cloudflared安装状态与版本验证、网络连接性测试、自动修复机制（尝试安装cloudflared）以及集成了任务75先进策略的DNS传播验证。两个模块均已通过单元测试。\n\n架构特点：V2功能采用模块化设计，完全独立；通过自动检测现有配置实现智能化；具备完善的错误处理和网络超时机制，保证健壮性；通过配置文件权限控制和API令牌加密存储确保安全性；并拥有良好的单元测试覆盖。\n\n技术亮点：使用EnhancedLogger进行结构化日志记录，支持指数退避重试机制，通过权威DNS查询验证DNS传播，可自动安装缺失的cloudflared工具，并完全向下兼容现有系统。\n</info added on 2025-09-09T13:39:33.848Z>",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "开发健壮的隧道生命周期管理器 (TunnelLifecycle)",
+            "description": "实现`TunnelLifecycle`模块，全权负责`cloudflared`进程的创建、运行、监控和清理，确保隧道连接的稳定与可靠。",
+            "dependencies": [
+              "77.1"
+            ],
+            "details": "基于任务73的成功经验，此模块将封装`cloudflared`的命令行交互。它将负责调用`cloudflared tunnel create`创建持久化隧道，并使用强制性的`--config`参数启动`cloudflared tunnel run`进程以保证凭证加载。核心功能是实现对子进程的健壮监控，捕获标准输出/错误，并设置事件监听器以处理进程的意外退出，在必要时触发自动重启机制。同时，需提供一个可靠的`cleanup`方法，确保在用户终止代理时能彻底清理`cloudflared`进程。\n<info added on 2025-09-09T13:46:42.900Z>\n此子任务已成功完成。\n\n实现的核心是`TunnelLifecycle`隧道生命周期管理器 (`src/v2/tunnel-lifecycle.js`)，其主要功能包括：\n- 支持临时(quick)和命名(named)两种模式的隧道创建。\n- 实现了对cloudflared进程的完整生命周期管理，包括健壮的进程监控（30秒健康检查）、最多3次的自动重启机制（指数退避延迟）以及优雅的资源清理。\n- 能够自动生成符合官方规范的YAML配置文件，并强制使用`--config`参数以确保凭证稳定加载。\n\n在进程管理方面，实现了精细的状态跟踪（stopped/starting/running/stopping/error），集成了`CloudflaredErrorParser`进行智能错误解析，并加入了对SIGINT/SIGTERM信号的优雅退出处理、操作超时保护和内存泄漏防护机制。\n\n配置管理方面，与V2配置管理器集成，实现了独立的配置文件存储、隧道元数据持久化以及正确的`cert.pem`凭证路径管理。\n\n所有功能均已通过完整的单元测试覆盖（`test/v2-tunnel-lifecycle.test.js`中的8个测试用例全部通过），验证了配置生成、状态管理和清理机制的正确性。\n\n本次实现借鉴了任务73中关于强制使用`--config`和进程监控的成功经验，并通过模块化设计、多层错误处理和自动恢复机制，为V2一键代理功能提供了稳定可靠的底层基础。\n</info added on 2025-09-09T13:46:42.900Z>",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "构建三层容错的DNS管理器 (DNSManager)",
+            "description": "实现`DNSManager`模块，自动化处理CNAME记录的创建与更新。采用CLI命令、智能冲突解决和API回退的三层逻辑，以最大化DNS配置的成功率。",
+            "dependencies": [
+              "77.1",
+              "77.2"
+            ],
+            "details": "此任务是实现“一键式”体验的关键。将严格遵循任务65中设计的强大DNS创建逻辑。第一层：尝试使用`cloudflared tunnel route dns`命令进行标准配置。第二层：若因记录已存在而失败，则借鉴任务54和61的交互逻辑，引导用户解决冲突。第三层：若前两步均失败，则自动回退到使用Cloudflare API直接创建或更新CNAME记录，作为最终的保障机制。此模块需要从`ConfigManager`获取API令牌。\n<info added on 2025-09-09T13:59:08.863Z>\n已成功完成V2三层容错DNS管理器的开发和测试。\n\n核心实现包括：\n\n1. 三层容错逻辑 (`src/v2/dns-manager.js`)：\n   - 第一层 (CLI)：使用 `cloudflared tunnel route dns` 命令进行标准配置\n   - 第二层 (智能冲突解决)：检测DNS记录冲突，提供交互式和自动解决方案\n   - 第三层 (API回退)：直接通过Cloudflare API创建/更新CNAME记录\n\n2. 智能冲突处理：\n   - 自动查询现有DNS记录\n   - 支持交互式选择（更新/删除重建/取消）\n   - 非交互环境自动更新策略\n   - 检查记录是否已指向正确目标\n\n3. API集成：\n   - 完整的Cloudflare API支持（Zone查询、记录CRUD操作）\n   - 智能Zone ID解析（根域名提取）\n   - 详细的错误处理和用户友好消息\n\n4. 健壮性特性：\n   - 集成CloudflaredErrorParser进行智能错误解析\n   - 支持API令牌验证和错误回退\n   - DNS传播验证功能\n   - 完整的清理和回滚机制\n\n5. 测试覆盖 (`test/v2-dns-manager.test.js`)：\n   - 9个测试用例全部通过\n   - 覆盖所有三层场景和边界情况\n   - 模拟API响应和CLI命令结果\n   - 验证错误处理和状态管理\n\n该模块完全集成了任务54、61、65中的成功经验，实现了任务描述中要求的\"CLI -> 冲突解决 -> API回退\"的三层逻辑，为V2一键代理功能提供了可靠的DNS配置能力。\n</info added on 2025-09-09T13:59:08.863Z>",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "设计V2用户交互流程与上下文错误处理器",
+            "description": "实现`UserGuidance`和`ErrorHandler`模块，将复杂的后台流程简化为对用户透明的单一命令`uvx proxy-local <port>`，并提供在流程各阶段失败时的清晰、可操作的错误引导。",
+            "dependencies": [
+              "77.1",
+              "77.2",
+              "77.3"
+            ],
+            "details": "此任务关注用户体验。首先，实现`uvx proxy-local <port> --provider=cloudflare-v2`的命令入口，负责协调调用其他核心模块。其次，借鉴任务59的简化思路，设计极简交互流程，仅在首次认证或处理DNS冲突等必要情况下提示用户。最后，构建一个上下文感知的`ErrorHandler`，它能精确识别失败的阶段（如认证、隧道创建、DNS配置），并向用户呈现友好的错误信息和具体的恢复建议。\n<info added on 2025-09-09T14:08:44.928Z>\n已成功完成V2用户交互流程与上下文错误处理器的开发和测试。核心实现包括：1. 上下文感知错误处理器 (`src/v2/error-handler.js`)：支持15种错误类型的精准识别，能够精确识别失败阶段，每种错误类型都有对应的恢复策略和用户指引，并能智能判断自动修复，将技术错误转换为清晰的中文指引。2. V2用户交互流程管理器 (`src/v2/user-guidance.js`)：提供`createOneClickProxy(port, options)`主入口，实现环境预检、智能认证、隧道创建、DNS配置、最终验证的5步标准流程，并支持多种认证模式与自动化决策。3. Cloudflare V2 Provider (`src/v2/cloudflare-v2-provider.js`)：完全兼容现有提供商系统，支持V2特性并保持向后兼容。交互流程采用极简设计，支持非交互环境，并提供清晰的状态反馈。错误处理具备上下文感知能力，支持自动恢复尝试，并为每个错误配有具体的解决步骤。所有集成、模块和错误处理测试均已通过。该实现成功将复杂的后台流程简化为 `uvx proxy-local <port> --provider=cloudflare-v2` 的单一命令入口，为最终的端到端集成（任务77.5）奠定了坚实基础。\n</info added on 2025-09-09T14:08:44.928Z>",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "集成DNS传播验证并完成端到端流程",
+            "description": "实现`ValidationEngine`的DNS验证部分，并在所有模块完成后，进行完整的端到端集成，通过权威DNS查询确保代理域名可用，最终交付稳定可靠的一键代理功能。",
+            "dependencies": [
+              "77.3",
+              "77.4"
+            ],
+            "details": "作为收尾任务，此子任务负责验证和整合。首先，在DNS记录配置成功后，将调用`ValidationEngine`的验证逻辑。借鉴任务75的先进策略，通过查询权威DNS服务器（如`1.1.1.1`）并结合指数退避重试机制，来应对DNS传播延迟，确认CNAME记录已生效。最后，将所有模块（Config, Tunnel, DNS, UI, Error, Validation）集成到主命令流程中，进行全面的端到端测试，确保数据流和控制流正确无误，功能完整交付。\n<info added on 2025-09-09T14:32:39.446Z>\n任务完成总结：\n1. DNS传播验证：在ValidationEngine中实现了先进的DNS验证功能，结合了权威DNS查询和指数退避重试策略（2s -> 30s）。支持多DNS服务器查询和三层回退验证（权威DNS -> 公共DNS -> API）。\n2. 端到端集成：成功集成了所有V2模块，创建了新的主入口（src/v2/index.js），并添加了对`cloudflare-v2`提供商的支持。实现了完善的资源清理机制，支持前台和后台运行模式。\n3. 测试与验证：通过了全面的端到端测试，测试套件（test/v2-end-to-end.test.js）中的8个测试用例100%通过，覆盖了所有V2模块的基础功能。验证表明所有模块工作正常，流程稳定。\n4. 使用方式：V2功能现已交付，可通过 `uvx proxy-local 8000 --provider=cloudflare-v2` 使用。同时支持 `--daemon`（后台模式）和 `--cloudflare-custom=myapp`（自定义子域名）等选项。\n</info added on 2025-09-09T14:32:39.446Z>",
+            "status": "done",
+            "testStrategy": ""
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-09-05T13:44:42.534Z",
-      "updated": "2025-09-09T00:31:00.063Z",
+      "updated": "2025-09-09T14:33:02.326Z",
       "description": "Tasks for master context"
     }
   }

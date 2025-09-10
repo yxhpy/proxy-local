@@ -2,6 +2,8 @@
 
 import { Command } from 'commander';
 import { ProviderManager, CloudflareProvider, PinggyProvider, LocalTunnelProvider, ServeoProvider } from '../src/providers/index.js';
+import { CloudflareV2Provider } from '../src/v2/cloudflare-v2-provider.js';
+import { createV2Proxy } from '../src/v2/index.js';
 import { formatter } from '../src/utils/output-formatter.js';
 import { configLoader } from '../src/config/index.js';
 import { processManager } from '../src/utils/process-manager.js';
@@ -14,6 +16,7 @@ const manager = new ProviderManager();
 
 // 注册提供商（按优先级：Cloudflare 为默认，其他作为备选）
 manager.register(new CloudflareProvider(), true); // 默认：Cloudflare 临时模式，无需登录
+manager.register(new CloudflareV2Provider(), false); // V2：Cloudflare 一键代理，新架构
 manager.register(new PinggyProvider()); // 备选：无确认页面
 manager.register(new ServeoProvider()); // 备选：SSH 隧道，无确认页面  
 manager.register(new LocalTunnelProvider()); // 备选：经典方案
@@ -24,12 +27,13 @@ program
   .description('多提供商内网穿透 CLI 工具')
   .version('3.2.1')
   .argument('[port]', 'Local port to proxy')
-  .option('-p, --provider <name>', 'Specify a tunnel provider (pinggy, localtunnel, serveo, cloudflare)')
+  .option('-p, --provider <name>', 'Specify a tunnel provider (pinggy, localtunnel, serveo, cloudflare, cloudflare-v2)')
   .option('--list-providers', 'List all available providers with features')
   .option('--show-config', 'Show current configuration settings')
   .option('--cloudflare-login', 'Login to Cloudflare account for persistent tunnels')
   .option('--cloudflare-logout', 'Logout from Cloudflare account')
   .option('--cloudflare-custom <name>', 'Use custom Cloudflare tunnel name')
+  .option('--skip-auth', 'Skip authentication and use quick tunnel (cloudflare-v2 only)')
   .option('--reset-domain', 'Reset fixed domain configuration and show domain selection menu')
   .option('--timeout <ms>', 'Connection timeout in milliseconds')
   .option('--retries <n>', 'Number of retry attempts')
@@ -284,7 +288,7 @@ program
 
     // 验证 provider 选项（如果提供的话）
     if (options.provider) {
-      const availableProviders = ['pinggy', 'localtunnel', 'serveo', 'cloudflare'];
+      const availableProviders = ['pinggy', 'localtunnel', 'serveo', 'cloudflare', 'cloudflare-v2'];
       if (!availableProviders.includes(options.provider.toLowerCase())) {
         console.error(`❌ 错误: 未知的提供商 "${options.provider}"`);
         console.log(`可用的提供商: ${availableProviders.join(', ')}`);
@@ -295,12 +299,15 @@ program
 
     // 处理 Cloudflare 自定义隧道名称
     if (options.cloudflareCustom) {
-      if (options.provider && options.provider !== 'cloudflare') {
-        console.error('❌ 错误: --cloudflare-custom 只能与 --provider=cloudflare 一起使用');
+      if (options.provider && !['cloudflare', 'cloudflare-v2'].includes(options.provider)) {
+        console.error('❌ 错误: --cloudflare-custom 只能与 --provider=cloudflare 或 --provider=cloudflare-v2 一起使用');
         process.exit(1);
       }
-      options.provider = 'cloudflare'; // 强制使用 Cloudflare
-      console.log(`🎯 使用自定义 Cloudflare 隧道名称: ${options.cloudflareCustom}`);
+      // 如果没有指定provider，默认使用V2
+      if (!options.provider) {
+        options.provider = 'cloudflare-v2';
+      }
+      console.log(`🎯 使用自定义 Cloudflare 域名: ${options.cloudflareCustom}`);
     }
 
     // 检查端口是否提供
@@ -323,6 +330,108 @@ program
     
     if (config.ui.verbose) {
       console.log(formatter.formatInfo(`使用提供商: ${selectedProvider} ${options.provider ? '(CLI指定)' : '(配置默认)'}`));
+    }
+
+    // 处理 Cloudflare V2 一键代理
+    if (selectedProvider === 'cloudflare-v2') {
+      console.log('🚀 启动 Cloudflare V2 一键代理...');
+      
+      try {
+        const v2Result = await createV2Proxy(portNumber, {
+          interactive: !options.daemon,
+          daemon: options.daemon,
+          verbose: config.ui.verbose,
+          domain: options.cloudflareCustom,  // 修正参数名称
+          resetDomain: options.resetDomain,
+          skipAuth: options.skipAuth
+        });
+
+        // 检查V2代理是否成功创建
+        if (!v2Result.success) {
+          const errorMessage = v2Result.error?.displayMessage || v2Result.error?.originalError || 'V2代理创建失败';
+          console.error(`❌ ${errorMessage}`);
+          process.exit(1);
+        }
+
+        if (options.daemon) {
+          // 后台模式
+          const processInfo = processManager.addProcess({
+            pid: process.pid,
+            port: portNumber,
+            url: v2Result.url,
+            provider: 'cloudflare-v2',
+            originalUrl: v2Result.url,
+            features: ['dns-auto-config', 'one-click', 'persistent']
+          });
+
+          if (processInfo) {
+            console.log('✅ V2一键代理后台启动成功!');
+            console.log(`🌐 访问地址: ${v2Result.url}`);
+            console.log(`🔧 进程ID: ${process.pid}`);
+            console.log(`📋 使用 'uvx-proxy-local --list' 查看运行中的进程`);
+            console.log(`🛑 使用 'uvx-proxy-local --kill ${process.pid}' 终止此进程`);
+
+            processManager.daemonizeCurrentProcess();
+
+            // 设置信号处理
+            process.on('SIGTERM', async () => {
+              console.log('🛑 接收到终止信号，正在清理...');
+              try {
+                await v2Result.cleanup?.();
+                processManager.removeProcess(process.pid);
+                console.log('✅ V2代理已清理完成');
+              } catch (error) {
+                console.warn('⚠️  清理时出现警告:', error.message);
+              }
+              process.exit(0);
+            });
+
+            process.on('SIGINT', async () => {
+              console.log('🛑 接收到中断信号，正在清理...');
+              try {
+                await v2Result.cleanup?.();
+                processManager.removeProcess(process.pid);
+                console.log('✅ V2代理已清理完成');
+              } catch (error) {
+                console.warn('⚠️  清理时出现警告:', error.message);
+              }
+              process.exit(0);
+            });
+          }
+        } else {
+          // 前台模式
+          console.log('🎉 V2一键代理启动成功!');
+          console.log(`🌐 访问地址: ${v2Result.url}`);
+          if (v2Result.tunnel?.tunnelId) {
+            console.log(`🆔 隧道ID: ${v2Result.tunnel.tunnelId}`);
+          }
+          if (v2Result.dns?.method) {
+            console.log(`🌐 DNS方式: ${v2Result.dns.method}`);
+          }
+          console.log(`⏱️  总耗时: ${Math.round(v2Result.duration / 1000)}秒`);
+          console.log('按 Ctrl+C 退出');
+
+          // 设置信号处理
+          process.on('SIGINT', async () => {
+            console.log('\n🛑 正在关闭V2代理...');
+            try {
+              await v2Result.cleanup?.();
+              console.log('✅ V2代理已关闭');
+            } catch (error) {
+              console.warn('⚠️  关闭时出现警告:', error.message);
+            }
+            process.exit(0);
+          });
+        }
+
+        return; // V2流程完成，直接返回
+      } catch (error) {
+        console.error(`❌ V2代理创建失败: ${error.message}`);
+        if (config.ui.verbose) {
+          console.error('详细错误信息:', error);
+        }
+        process.exit(1);
+      }
     }
     
     // 检查并设置 Cloudflare 认证模式

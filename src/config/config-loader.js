@@ -237,7 +237,7 @@ export class ConfigLoader {
    * 验证提供商名称
    */
   validateProvider(provider) {
-    const validProviders = ['cloudflare', 'pinggy', 'serveo', 'localtunnel'];
+    const validProviders = ['cloudflare', 'cloudflare-v2', 'pinggy', 'serveo', 'localtunnel'];
     return validProviders.includes(provider.toLowerCase());
   }
 

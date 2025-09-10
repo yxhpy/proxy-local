@@ -95,8 +95,16 @@ export class CloudflaredCommandBuilder {
   /**
    * 构建DNS路由命令
    */
-  buildRouteCommand(tunnelId, domain) {
-    return this.buildCommand(['tunnel', 'route', 'dns', tunnelId, domain]);
+  buildRouteCommand(tunnelId, domain, options = {}) {
+    const command = ['tunnel', 'route', 'dns'];
+    
+    if (options.overwrite) {
+      command.push('--overwrite-dns');
+    }
+    
+    command.push(tunnelId, domain);
+    
+    return this.buildCommand(command);
   }
 
   /**
