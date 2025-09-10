@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [3.5.0](https://github.com/yxhpy/proxy-local/compare/v3.4.0...v3.5.0) (2025-09-10)
+
+
+### Features
+
+* 完善发布工作流和测试套件 ([626bdec](https://github.com/yxhpy/proxy-local/commit/626bdec36038ab4a225f348571004a5f0d3ad849))
+
+
+### Bug Fixes
+
+* 修复安全漏洞和发布前检查逻辑 ([a74cfbe](https://github.com/yxhpy/proxy-local/commit/a74cfbe2a737b755a3bb32fe6e7ac861a55542c2))
+* 更新CLI版本号到3.4.0 ([4d60191](https://github.com/yxhpy/proxy-local/commit/4d6019108682ec349a46971d09d39a5d641b9406))
+
 ## [3.3.0](https://github.com/yxhpy/proxy-local/compare/v3.2.1...v3.3.0) (2025-09-07)
 
 
