@@ -149,7 +149,7 @@ async function testCloudflareCommands() {
   // Test cloudflare custom with wrong provider
   const conflictResult = await runCliCommand(['8000', '--cloudflare-custom=mytest', '--provider=pinggy']);
   assert.notEqual(conflictResult.code, 0, 'Conflicting options should fail');
-  assert.ok(conflictResult.output.includes('只能与 --provider=cloudflare 一起使用'), 'Should show conflict error');
+  assert.ok(conflictResult.output.includes('只能与 --provider=cloudflare 或 --provider=cloudflare-v2 一起使用'), 'Should show conflict error');
   
   console.log('    ✓ Cloudflare commands work correctly');
 }

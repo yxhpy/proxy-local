@@ -28,7 +28,18 @@ export class CloudflareProvider extends TunnelProvider {
       speed: 'fast',
       httpsSupport: true,
       customDomain: true, // 现在支持自定义域名
-      description: 'Cloudflare 快速隧道，支持域名选择和固定功能'
+      description: 'Cloudflare 快速隧道，支持域名选择和固定功能',
+      benefits: [
+        '无需注册账户',
+        '全球 CDN 加速',
+        '无确认页面',
+        '支持HTTPS',
+        '域名选择功能',
+        '原子化隧道管理'
+      ],
+      maxConnections: '无限制',
+      uptime: '99.9%+',
+      regions: ['全球 CDN', '亚太地区', '北美', '欧洲']
     });
     
     super('cloudflare', features);
@@ -118,6 +129,20 @@ export class CloudflareProvider extends TunnelProvider {
       console.warn(chalk.yellow(`检查认证状态失败: ${error.message}`));
       return false;
     }
+  }
+
+  /**
+   * 获取提供商当前状态
+   * @returns {Object} 状态信息
+   */
+  getStatus() {
+    return {
+      isActive: !!this.currentProcess && !this.currentProcess.killed,
+      tunnelUrl: this.tunnelUrl,
+      processId: this.currentProcess ? this.currentProcess.pid : undefined,
+      authMode: this.authMode,
+      provider: this.name
+    };
   }
 
   /**
@@ -1927,6 +1952,11 @@ export class CloudflareProvider extends TunnelProvider {
     console.log(chalk.gray('检测到您尚未通过 cloudflared 登录'));
     console.log(chalk.gray('请选择您希望使用的隧道模式：'));
     console.log('');
+
+    // 在测试环境中，如果设置了skipDomainSelection，直接抛出错误
+    if (options.skipDomainSelection) {
+      throw new Error('cloudflared 需要登录才能创建隧道，请运行登录命令');
+    }
 
     const { choice } = await inquirer.prompt([
       {

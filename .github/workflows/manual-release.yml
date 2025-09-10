@@ -1,0 +1,193 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version-type:
+        description: 'Version increment type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+        - prerelease
+      prerelease-id:
+        description: 'Prerelease identifier (e.g., alpha, beta, rc)'
+        required: false
+        default: 'beta'
+        type: string
+      skip-npm:
+        description: 'Skip npm publishing'
+        required: false
+        default: false
+        type: boolean
+      dry-run:
+        description: 'Dry run (no actual changes)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  manual-release:
+    name: Manual Release (${{ inputs.version-type }})
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        registry-url: 'https://registry.npmjs.org/'
+        cache: 'npm'
+    
+    - name: Configure Git
+      if: inputs.dry-run == false
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Verify documentation
+      run: npm run docs:verify
+    
+    - name: Security audit
+      run: npm audit --audit-level moderate
+      continue-on-error: true
+    
+    - name: Update documentation
+      if: inputs.dry-run == false
+      run: npm run docs:update
+    
+    - name: Preview release (dry-run)
+      if: inputs.dry-run == true
+      run: |
+        echo "🔍 Dry run mode - showing what would happen:"
+        
+        if [ "${{ inputs.version-type }}" = "prerelease" ]; then
+          npm run release:dry -- --prerelease ${{ inputs.prerelease-id }}
+        else
+          npm run release:dry -- --release-as ${{ inputs.version-type }}
+        fi
+    
+    - name: Create release
+      if: inputs.dry-run == false
+      run: |
+        echo "🚀 Creating ${{ inputs.version-type }} release..."
+        
+        if [ "${{ inputs.version-type }}" = "prerelease" ]; then
+          npm version prerelease --preid=${{ inputs.prerelease-id }}
+          git push --follow-tags origin master
+        else
+          if [ "${{ inputs.version-type }}" = "major" ]; then
+            npm run release -- --release-as major
+          elif [ "${{ inputs.version-type }}" = "minor" ]; then
+            npm run release -- --release-as minor
+          else
+            npm run release -- --release-as patch
+          fi
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Get new version
+      if: inputs.dry-run == false
+      id: version
+      run: |
+        NEW_VERSION=$(node -p "require('./package.json').version")
+        echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "Created version: $NEW_VERSION"
+    
+    - name: Publish to npm
+      if: inputs.dry-run == false && inputs.skip-npm == false
+      run: |
+        if [ "${{ inputs.version-type }}" = "prerelease" ]; then
+          npm publish --tag ${{ inputs.prerelease-id }}
+        else
+          npm publish
+        fi
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    
+    - name: Create GitHub Release
+      if: inputs.dry-run == false && inputs.version-type != 'prerelease'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.new-version }}
+        release_name: Release v${{ steps.version.outputs.new-version }}
+        body: |
+          ## Manual Release v${{ steps.version.outputs.new-version }}
+          
+          This is a manually triggered ${{ inputs.version-type }} release.
+          
+          See [CHANGELOG.md](./CHANGELOG.md) for detailed changes.
+          
+          ## Installation
+          
+          ```bash
+          npm install -g uvx-proxy-local@${{ steps.version.outputs.new-version }}
+          ```
+        draft: false
+        prerelease: false
+    
+    - name: Create Prerelease
+      if: inputs.dry-run == false && inputs.version-type == 'prerelease'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.new-version }}
+        release_name: Prerelease v${{ steps.version.outputs.new-version }}
+        body: |
+          ## Prerelease v${{ steps.version.outputs.new-version }}
+          
+          This is a ${{ inputs.prerelease-id }} prerelease for testing purposes.
+          
+          ## Installation
+          
+          ```bash
+          npm install -g uvx-proxy-local@${{ inputs.prerelease-id }}
+          ```
+          
+          ⚠️ **Warning**: This is a prerelease version and may contain bugs.
+        draft: false
+        prerelease: true
+    
+    - name: Summary
+      if: inputs.dry-run == false
+      run: |
+        echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version Type**: ${{ inputs.version-type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **New Version**: v${{ steps.version.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **NPM Published**: ${{ inputs.skip-npm == false && 'Yes' || 'Skipped' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **GitHub Release**: Created" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Dry Run Summary
+      if: inputs.dry-run == true
+      run: |
+        echo "## Dry Run Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Mode**: Preview only (no changes made)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version Type**: ${{ inputs.version-type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Would Skip NPM**: ${{ inputs.skip-npm }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Re-run this workflow without dry-run to execute the release." >> $GITHUB_STEP_SUMMARY

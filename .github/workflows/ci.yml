@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    name: Test on Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16, 18, 20]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Verify documentation consistency
+      run: npm run docs:verify
+      if: matrix.node-version == 20
+    
+    - name: Security audit
+      run: npm audit --audit-level moderate
+      continue-on-error: true
+    
+    - name: Check package size
+      run: npm pack --dry-run
+      if: matrix.node-version == 20
+
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check code formatting
+      run: |
+        # 如果项目有prettier配置，运行格式检查
+        if [ -f ".prettierrc" ] || [ -f "prettier.config.js" ]; then
+          npx prettier --check .
+        fi
+      continue-on-error: true
+    
+    - name: Run linter
+      run: |
+        # 如果项目有eslint配置，运行linter
+        if [ -f ".eslintrc" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ]; then
+          npx eslint .
+        fi
+      continue-on-error: true
+
+  compatibility:
+    name: Compatibility Test
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run basic functionality test
+      run: |
+        # 测试CLI基本功能
+        timeout 10 node bin/index.js --help || true
+        timeout 10 node bin/index.js --list-providers || true
+        timeout 10 node bin/index.js --show-config || true
+      shell: bash

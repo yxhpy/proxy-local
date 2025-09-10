@@ -16,9 +16,16 @@
     "test:formatter": "node test/output-formatter.test.js",
     "test:config": "node test/config-loader.test.js",
     "start": "node bin/index.js",
-    "release": "npm test && standard-version && git push --follow-tags origin master && npm publish",
-    "release:dry": "npm test && standard-version --dry-run",
-    "release:beta": "npm test && standard-version --prerelease beta && git push --follow-tags origin master && npm publish --tag beta"
+    "docs:update": "node scripts/update-docs.js",
+    "docs:verify": "node scripts/verify-docs.js",
+    "pre-release": "node scripts/pre-release-check.js",
+    "prepublishOnly": "npm run test && npm run docs:verify",
+    "version": "npm run docs:update && conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md docs/ README.md",
+    "postversion": "git push --follow-tags origin master",
+    "release": "npm run pre-release && standard-version && git push --follow-tags origin master && npm publish",
+    "release:dry": "npm run pre-release && standard-version --dry-run",
+    "release:beta": "npm run pre-release && standard-version --prerelease beta && git push --follow-tags origin master && npm publish --tag beta",
+    "release:alpha": "npm run pre-release && standard-version --prerelease alpha && git push --follow-tags origin master && npm publish --tag alpha"
   },
   "keywords": [
     "tunnel",
@@ -40,6 +47,22 @@
     "localtunnel": "^2.0.2"
   },
   "devDependencies": {
-    "standard-version": "^9.5.0"
+    "standard-version": "^9.5.0",
+    "conventional-changelog-cli": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

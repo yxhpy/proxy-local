@@ -1,0 +1,203 @@
+name: Release
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'docs/**'
+      - '.github/**'
+      - '*.md'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  test:
+    name: Test Before Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run full test suite
+      run: npm test
+    
+    - name: Verify documentation consistency
+      run: npm run docs:verify
+    
+    - name: Security audit
+      run: npm audit --audit-level moderate
+
+  release:
+    name: Automated Release
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    
+    outputs:
+      new-version: ${{ steps.version.outputs.new-version }}
+      release-created: ${{ steps.version.outputs.release-created }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        registry-url: 'https://registry.npmjs.org/'
+        cache: 'npm'
+    
+    - name: Configure Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check for changes requiring release
+      id: changes
+      run: |
+        # 检查自上次发布以来是否有实质性变更
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -z "$LAST_TAG" ]; then
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+          echo "reason=Initial release" >> $GITHUB_OUTPUT
+        else
+          # 检查是否有feat/fix提交
+          CHANGES=$(git log $LAST_TAG..HEAD --oneline --grep="^feat" --grep="^fix" --grep="^BREAKING CHANGE" --grep="!" 2>/dev/null || echo "")
+          if [ -n "$CHANGES" ]; then
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "reason=Found feature/fix commits since last release" >> $GITHUB_OUTPUT
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "reason=No significant changes found" >> $GITHUB_OUTPUT
+          fi
+        fi
+    
+    - name: Update documentation
+      if: steps.changes.outputs.has-changes == 'true'
+      run: npm run docs:update
+    
+    - name: Create Release
+      if: steps.changes.outputs.has-changes == 'true'
+      id: version
+      run: |
+        # 使用 conventional commits 生成版本和变更日志
+        npm run release
+        
+        # 获取新版本号
+        NEW_VERSION=$(node -p "require('./package.json').version")
+        echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "release-created=true" >> $GITHUB_OUTPUT
+        
+        echo "🎉 Created release v$NEW_VERSION"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Skip Release
+      if: steps.changes.outputs.has-changes != 'true'
+      run: |
+        echo "⏭️ Skipping release: ${{ steps.changes.outputs.reason }}"
+        echo "release-created=false" >> $GITHUB_OUTPUT
+
+  publish:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    if: needs.release.outputs.release-created == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: master # 确保拉取最新的发布提交
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        registry-url: 'https://registry.npmjs.org/'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Final pre-publish checks
+      run: |
+        npm run docs:verify
+        npm pack --dry-run
+    
+    - name: Publish to npm
+      run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ needs.release.outputs.new-version }}
+        release_name: Release v${{ needs.release.outputs.new-version }}
+        body: |
+          ## Changes in v${{ needs.release.outputs.new-version }}
+          
+          See [CHANGELOG.md](./CHANGELOG.md) for detailed changes.
+          
+          ## Installation
+          
+          ```bash
+          npm install -g uvx-proxy-local@${{ needs.release.outputs.new-version }}
+          ```
+          
+          ## Quick Start
+          
+          ```bash
+          uvx-proxy-local 8080
+          ```
+        draft: false
+        prerelease: false
+
+  notify:
+    name: Post-Release Notifications
+    needs: [release, publish]
+    runs-on: ubuntu-latest
+    if: always() && needs.release.outputs.release-created == 'true'
+    
+    steps:
+    - name: Success Notification
+      if: needs.publish.result == 'success'
+      run: |
+        echo "🎉 Successfully released v${{ needs.release.outputs.new-version }}"
+        echo "📦 Package published to npm"
+        echo "🏷️ GitHub release created"
+    
+    - name: Failure Notification
+      if: needs.publish.result == 'failure'
+      run: |
+        echo "❌ Release v${{ needs.release.outputs.new-version }} partially failed"
+        echo "Version was created but npm publish failed"
+        echo "Manual intervention may be required"

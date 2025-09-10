@@ -19,13 +19,21 @@ export class ProviderFeatures {
     speed = 'medium',
     httpsSupport = true,
     customDomain = false,
-    description = ''
+    description = '',
+    benefits = [],
+    maxConnections = '1',
+    uptime = '90%',
+    regions = []
   } = {}) {
     this.requiresConfirmation = requiresConfirmation;
     this.speed = speed; // 'fast', 'medium', 'slow'
     this.httpsSupport = httpsSupport;
     this.customDomain = customDomain;
     this.description = description;
+    this.benefits = benefits;
+    this.maxConnections = maxConnections;
+    this.uptime = uptime;
+    this.regions = regions;
   }
 }
 
