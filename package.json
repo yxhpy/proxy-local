@@ -44,11 +44,11 @@
     "commander": "^14.0.0",
     "cosmiconfig": "^9.0.0",
     "inquirer": "^12.9.4",
-    "localtunnel": "^2.0.2"
+    "localtunnel": "^1.8.3"
   },
   "devDependencies": {
-    "standard-version": "^9.5.0",
-    "conventional-changelog-cli": "^3.0.0"
+    "conventional-changelog-cli": "^3.0.0",
+    "standard-version": "^9.5.0"
   },
   "engines": {
     "node": ">=16.0.0",
