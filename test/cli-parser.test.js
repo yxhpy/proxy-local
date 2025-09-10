@@ -106,7 +106,7 @@ async function testVersionCommand() {
   const result = await runCliCommand(['--version']);
   
   assert.equal(result.code, 0, 'Version command should exit successfully');
-  assert.ok(result.output.includes('3.2.1'), 'Should display correct version');
+  assert.ok(result.output.includes('3.4.0'), 'Should display correct version');
   
   console.log('    ✓ Version command works correctly');
 }
