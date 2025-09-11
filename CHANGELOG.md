@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [3.5.1](https://github.com/yxhpy/proxy-local/compare/v3.5.0...v3.5.1) (2025-09-11)
+
+
+### Bug Fixes
+
+* 修复@pinggy/pinggy依赖问题和Node.js版本兼容性 ([6f681e4](https://github.com/yxhpy/proxy-local/commit/6f681e40f155423b2c64902404d6408e42f0f8ca))
+* 更新CLI版本号到3.5.0 ([8d7e3ff](https://github.com/yxhpy/proxy-local/commit/8d7e3ffc9eb5e88faf775530b5893ab2af84bf62))
+
 ## [3.5.0](https://github.com/yxhpy/proxy-local/compare/v3.4.0...v3.5.0) (2025-09-10)
 
 
