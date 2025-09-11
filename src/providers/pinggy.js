@@ -1,4 +1,3 @@
-import { pinggy } from '@pinggy/pinggy';
 import { TunnelProvider, TunnelResult, ProviderFeatures } from './interface.js';
 
 /**
@@ -24,7 +23,8 @@ export class PinggyProvider extends TunnelProvider {
    */
   async isAvailable() {
     try {
-      // 简单检查：尝试访问 pinggy 模块
+      // 动态导入检查：尝试导入 @pinggy/pinggy 模块
+      const { pinggy } = await import('@pinggy/pinggy');
       return typeof pinggy?.forward === 'function';
     } catch (error) {
       console.warn(`Pinggy availability check failed: ${error.message}`);
@@ -38,6 +38,9 @@ export class PinggyProvider extends TunnelProvider {
   async createTunnel(port) {
     try {
       console.log(`正在使用 Pinggy 创建隧道到端口 ${port}...`);
+      
+      // 动态导入 Pinggy SDK
+      const { pinggy } = await import('@pinggy/pinggy');
       
       // 使用 Pinggy SDK 创建隧道
       const tunnel = await pinggy.forward({ 
